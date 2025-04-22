@@ -112,11 +112,24 @@ class CommentSerializer(serializers.ModelSerializer):
 class CommentReplySerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     created_at = serializers.ReadOnlyField()
+    parent_reply = serializers.PrimaryKeyRelatedField(
+        queryset=CommentReply.objects.all(), required=False, allow_null=True
+    )
+    is_liked = serializers.SerializerMethodField()  # Don't forget to add this to fields if you're using it.
 
     class Meta:
         model = CommentReply
-        fields = ['id', 'comment', 'user', 'content', 'created_at', 'like_count']
-        read_only_fields = ['like_count']
+        fields = [
+            'id',
+            'comment',
+            'user',
+            'content',
+            'created_at',
+            'like_count',
+            'parent_reply',
+            'is_liked'
+        ]
+        read_only_fields = ['like_count', 'created_at']
 
     def get_user(self, obj):
         """
@@ -127,11 +140,70 @@ class CommentReplySerializer(serializers.ModelSerializer):
         return obj.user.id
 
     def get_is_liked(self, obj):
-        """Check if the authenticated user has liked this reply"""
+        """
+        Check if the authenticated user has liked this reply.
+        """
         user = self.context.get('request').user
         if user.is_authenticated:
             return CommentReplyLike.objects.filter(user=user, reply=obj).exists()
         return False
+
+
+class CommentWithRepliesCreatorSerializer(serializers.ModelSerializer):
+    creator = serializers.SerializerMethodField()
+    created_at = serializers.ReadOnlyField()
+    updated_at = serializers.ReadOnlyField()
+    replies = serializers.SerializerMethodField()
+
+    class InlineReplySerializer(serializers.ModelSerializer):
+        creator = serializers.SerializerMethodField()
+        created_at = serializers.ReadOnlyField()
+        parent_reply = serializers.PrimaryKeyRelatedField(read_only=True)
+        child_replies = serializers.SerializerMethodField()
+
+        class Meta:
+            model = CommentReply
+            fields = [
+                'id',
+                'comment',
+                'creator',
+                'content',
+                'created_at',
+                'like_count',
+                'parent_reply',
+                'child_replies'
+            ]
+
+        def get_creator(self, obj):
+            return obj.user.username if obj.user and obj.user.username else obj.user.id
+
+        def get_child_replies(self, obj):
+            children = obj.child_replies.all()
+            serializer = self.__class__(children, many=True, context=self.context)
+            return serializer.data
+
+    def get_creator(self, obj):
+        # FIXED: Changed from obj.user to obj.creator
+        return obj.creator.username if obj.creator and obj.creator.username else obj.creator.id
+
+    def get_replies(self, obj):
+        top_level_replies = obj.replies.filter(parent_reply__isnull=True)
+        serializer = self.InlineReplySerializer(top_level_replies, many=True, context=self.context)
+        return serializer.data
+
+    class Meta:
+        model = Comment
+        fields = [
+            'id',
+            'content',
+            'card',
+            'creator',
+            'created_at',
+            'updated_at',
+            'like_count',
+            'replies'
+        ]
+
 
 class CommentWithRepliesSerializer(CommentSerializer):
     # The "replies" field will use the related name defined on CommentReply (e.g., related_name='replies')

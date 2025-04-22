@@ -26,11 +26,11 @@ router.register(r'comment-replies', CommentReplyViewSet)
 urlpatterns = [
     # path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path("api/comments/update/", UpdateCommentView.as_view(), name="update-comment"),
-    path('api/replies/update/', CommentReplyUpdateViewSet.as_view(), name='comment-reply-update'),
     path('api/comments/like/', CommentLikeView.as_view(), name='comment-like'),
     path('api/comments/unlike/', CommentUnlikeView.as_view(), name='comment-unlike'),
     path('api/replies/like/', CommentReplyLikeView.as_view(), name='reply-like'),
     path('api/replies/unlike/', ReplyUnlikeView.as_view(), name='reply-unlike'),
+    path('api/replies', CommentReplyUpdateViewSet.as_view(), name='comment-reply-update'),
     path('api/saved-cards/', SavedCardAPIView.as_view(), name='saved-cards'),
     path('api/saved-cards/<int:card_id>/', SavedCardDeleteAPIView.as_view(), name='delete-saved-card'),
     path('api/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),

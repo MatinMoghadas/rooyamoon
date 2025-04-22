@@ -16,7 +16,7 @@ from .models import User, Card, Notification, Comment, CommentReply, SavedCard, 
 from .serializers import (
     OTPLoginSerializer, UserSerializer, UserRegistrationSerializer,
     CardSerializer, NotificationSerializer, LoginSerializer, CommentSerializer,
-    CommentReplySerializer, CommentWithRepliesSerializer, SavedCardSerializer
+    CommentReplySerializer, CommentWithRepliesSerializer, SavedCardSerializer, CommentWithRepliesCreatorSerializer
 )
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
@@ -1420,23 +1420,19 @@ class CommentReplyUpdateViewSet(GenericAPIView):
         responses={
             200: {
                 "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment reply updated successfully."]
-                    },
-                    "result": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "integer", "example": 1},
-                            "content": {"type": "string", "example": "This is an updated reply"},
-                            "user": {"type": "string", "example": "Username"},
-                            "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
-                        }
+                "properties": dict(statusCode={"type": "integer", "example": 200}, messages={
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "example": ["Comment reply updated successfully."]
+                }, result={
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "integer", "example": 1},
+                        "content": {"type": "string", "example": "This is an updated reply"},
+                        "user": {"type": "string", "example": "Username"},
+                        "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
                     }
-                }
+                })
             },
             400: {
                 "type": "object",
@@ -1577,7 +1573,7 @@ class CardCommentsRepliesAPIView(APIView):
         card = get_object_or_404(Card, id=card_id)
         # Retrieve all comments for this card
         comments = Comment.objects.filter(card=card).order_by('-created_at')
-        serializer = CommentWithRepliesSerializer(comments, many=True, context={'request': request})
+        serializer = CommentWithRepliesCreatorSerializer(comments, many=True, context={'request': request})
 
         return Response({
             "statusCode": 200,
