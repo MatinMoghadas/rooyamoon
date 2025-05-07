@@ -1,4 +1,4 @@
-faiss-cpu
+
 PyMuPDF
 google-generativeai 
 faiss-cpu 
