@@ -1,9 +1,0 @@
-faiss-cpu
-PyMuPDF
-google-generativeai 
-faiss-cpu 
-langchain 
-sentence-transformers
-numpy
-pickle
-fitz
