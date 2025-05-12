@@ -1,3 +1,4 @@
+
 import os
 import time
 import json
@@ -11,17 +12,17 @@ from dotenv import load_dotenv
 
 import google.generativeai as genai
 from google.api_core.exceptions import InternalServerError
-
 from sentence_transformers import SentenceTransformer
 
-load_dotenv()  # Loads variables from .env into environment
-
+load_dotenv()
 api_key = os.getenv("MY_API_KEY")
 
-for model_info in genai.list_models():
-    print(f"Model name: {model_info.name}")
-    print(f"Supported methods: {model_info.supported_generation_methods}")
-    print("-" * 20)
+# Expand ~ to full path
+base_dir = os.path.expanduser("~/rooyamoon")
+os.makedirs(base_dir, exist_ok=True)
+filename = "faiss_index.index"
+full_path = os.path.join(base_dir, filename)
+
 
 Instruction_prompt= """شخصیت و موقعیت:
 
@@ -122,11 +123,6 @@ Instruction_prompt= """شخصیت و موقعیت:
         پاسخ‌ها را سوالی تمام نکن.
         از اصطلاحات به‌روز استفاده کن.
         تمثیل‌ها توحیدی و اسلامی باشند."""
-#notice this is important part
-#should change this directory based on implementaion
-base_dir = "~/rooyamoon"
-filename = "faiss_index.index"
-full_path = os.path.join(base_dir, filename)
 
 class GeminiRAG:
     def __init__(self, api_key: str, model_name: str = "models/gemini-2.0-flash",
@@ -140,23 +136,17 @@ class GeminiRAG:
         self.instruction_prompt = instruction_prompt
         self.vectorstore_path = vectorstore_path
 
-        # Setup Gemini
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(model_name=model_name)
-
-        # Setup Embedder
         self.embedder = SentenceTransformer(embed_model_name)
 
-        # Get embedding dim
         embedding_dim = self.embedder.encode(['test']).shape[1]
         self.index = faiss.IndexFlatL2(embedding_dim)
         self.documents = []
 
     def load_document(self, pdf_path: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
         doc = fitz.open(pdf_path)
-        all_text = ""
-        for page in doc:
-            all_text += page.get_text()
+        all_text = "".join(page.get_text() for page in doc)
 
         chunks = []
         start = 0
@@ -164,7 +154,6 @@ class GeminiRAG:
             end = start + chunk_size
             chunks.append(all_text[start:end])
             start += chunk_size - overlap
-
         return chunks
 
     def add_document(self, chunks: List[str]):
@@ -194,55 +183,42 @@ class GeminiRAG:
 
         for attempt in range(3):
             try:
-                response = self.model.generate_content(instruction)
+                response = await asyncio.to_thread(self.model.generate_content, instruction)
                 text = response.text.strip()
-
-                # Parse safely using JSON
                 challenges = json.loads(text)
-
-                if isinstance(challenges, list) and all(isinstance(item, str) for item in challenges):
-                    if len(challenges) == num:
-                        await challenges
-                    else:
-                        raise ValueError(f"Expected {num} items, got {len(challenges)}.")
-                else:
-                    raise ValueError("Output is not a list of strings.")
+                if isinstance(challenges, list) and len(challenges) == num:
+                    return challenges
             except (json.JSONDecodeError, ValueError) as parse_err:
-                print(f"Parse error: {parse_err}")
+                print(f"❌ Parse error: {parse_err}")
             except InternalServerError as e:
-                print(f"Model error: {e}. Retrying in 5 seconds...")
-                time.sleep(5)
+                print(f"⚠️ Model error: {e}. Retrying...")
+                await asyncio.sleep(5)
 
-        raise RuntimeError("Failed to generate valid challenges after 3 retries.")
-
+        raise RuntimeError("❌ Failed to generate valid challenges after 3 retries.")
 
     async def ask_question(self, query: str, challange: str = "", top_k: int = 5) -> str:
         query_emb = self.embedder.encode([query], convert_to_numpy=True)
         D, I = self.index.search(np.array(query_emb), top_k)
-
         context = "\n".join([self.documents[i] for i in I[0] if i < len(self.documents)])
+
         prompt = f"""
-            ### instruction prompt : (explanation : this text is your guideline don't mention it on response)
-            {self.instruction_prompt}
-
-            Use the following context to answer the question.
-            Context:
-            {context}
-
-            Question: {query}
-
-            User intrested to this challange {challange}, use challange as more precise response
-            Answer:"""
+        ### instruction prompt (do not mention this in response)
+        {self.instruction_prompt}
+        Context:
+        {context}
+        Question: {query}
+        User is interested in this challenge: {challange}
+        Answer:"""
 
         for attempt in range(3):
             try:
-                response = self.model.generate_content(prompt)
-                await response.text
+                response = await asyncio.to_thread(self.model.generate_content, prompt)
+                return response.text.strip()
             except InternalServerError as e:
-                print(f"Error: {e}. Retrying in 5 seconds...")
-                time.sleep(5)
+                print(f"⚠️ Error: {e}. Retrying...")
+                await asyncio.sleep(5)
 
-        raise Exception("Failed to generate after 3 retries.")
+        raise Exception("❌ Failed to generate response after retries.")
 
     def save_vectorstore(self):
         faiss.write_index(self.index, self.vectorstore_path + ".index")
@@ -250,20 +226,22 @@ class GeminiRAG:
             pickle.dump(self.documents, f)
 
     def load_vectorstore(self):
-        if os.path.exists(self.vectorstore_path + ".index") and os.path.exists(self.vectorstore_path + ".pkl"):
-            self.index = faiss.read_index(self.vectorstore_path + ".index")
-            with open(self.vectorstore_path + ".pkl", "rb") as f:
+        idx_path = self.vectorstore_path + ".index"
+        pkl_path = self.vectorstore_path + ".pkl"
+        if os.path.exists(idx_path) and os.path.exists(pkl_path):
+            self.index = faiss.read_index(idx_path)
+            with open(pkl_path, "rb") as f:
                 self.documents = pickle.load(f)
             return True
         return False
 
-def load_and_add_documents(rag, pdf_files: list):
+def load_and_add_documents(rag: GeminiRAG, pdf_files: list):
     for file in pdf_files:
         chunks = rag.load_document(file)
         rag.add_document(chunks)
     print(f"✅ Loaded and embedded {len(pdf_files)} document(s).")
 
-def chat_loop(rag):
+async def chat_loop(rag: GeminiRAG):
     print("🎤 Chat started. Type 'خدافظ' or 'خداحافظ' to exit.")
     exit_keywords = ['خدافظ', 'خداحافظ', 'تموم شد']
 
@@ -274,33 +252,30 @@ def chat_loop(rag):
                 print('رویامون: به امید ساختن رویامون 🌟')
                 break
             challenges = await rag.generate_challenges(user_input)
-            chosen_challenge = challenges[0]  # or add logic to pick one
+            # wait until user choose one button
+            chosen_challenge = challenges[0]
             response = await rag.ask_question(user_input, challange=chosen_challenge)
-            print('رویامون:', response)
-            print('-' * 50)
-            print(challenges)
-            print('-' * 50)
+            # print('رویامون:', response)
+            # print('-' * 40)
+            # print(f"📌 چالش‌ها: {challenges}")
+            # print('-' * 40)
         except Exception as e:
             print(f"❌ خطا: {e}")
-            continue
-
-
-base_dir = "~/rooyamoon"
-filename = "rag_file1.pdf"
-rag_path = os.path.join(base_dir, filename)
 
 def main():
     rag = GeminiRAG(api_key=api_key)
+    rag_path = os.path.join(base_dir, "rag_file1.pdf")
 
     if rag.load_vectorstore():
-        print("📦 Loaded vectorstore from memory.")
+        print("📦 Vectorstore loaded from memory.")
     else:
-        print("ℹ️ No saved vectorstore found. Embedding from scratch.")
-        pdf_files = [rag_path]  # Replace with your file path in Colab
+        print("📥 No saved vectorstore found. Embedding now...")
+        pdf_files = [rag_path]
         load_and_add_documents(rag, pdf_files)
         rag.save_vectorstore()
-        print("✅ Vectorstore saved to memory.")
+        print("✅ Vectorstore saved.")
 
-    await chat_loop(rag)
+    asyncio.run(chat_loop(rag))
 
-main()
+if __name__ == "__main__":
+    main()
