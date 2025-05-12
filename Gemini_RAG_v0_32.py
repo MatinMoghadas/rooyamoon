@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import asyncio
 import fitz
 import faiss
 import pickle
@@ -171,7 +172,7 @@ class GeminiRAG:
         self.index.add(np.array(embeddings))
         self.documents.extend(chunks)
 
-    def generate_challenges(self, query, num=6):
+    async def generate_challenges(self, query, num=6):
         instruction = f"""
             وظیفه تو تولید چالش‌هایی است که مرتبط با هدف کاربر باشد.
 
@@ -201,7 +202,7 @@ class GeminiRAG:
 
                 if isinstance(challenges, list) and all(isinstance(item, str) for item in challenges):
                     if len(challenges) == num:
-                        return challenges
+                        await challenges
                     else:
                         raise ValueError(f"Expected {num} items, got {len(challenges)}.")
                 else:
@@ -215,7 +216,7 @@ class GeminiRAG:
         raise RuntimeError("Failed to generate valid challenges after 3 retries.")
 
 
-    def ask_question(self, query: str, challange: str = "", top_k: int = 5) -> str:
+    async def ask_question(self, query: str, challange: str = "", top_k: int = 5) -> str:
         query_emb = self.embedder.encode([query], convert_to_numpy=True)
         D, I = self.index.search(np.array(query_emb), top_k)
 
@@ -236,7 +237,7 @@ class GeminiRAG:
         for attempt in range(3):
             try:
                 response = self.model.generate_content(prompt)
-                return response.text
+                await response.text
             except InternalServerError as e:
                 print(f"Error: {e}. Retrying in 5 seconds...")
                 time.sleep(5)
@@ -272,10 +273,9 @@ def chat_loop(rag):
             if user_input.lower() in [e.lower() for e in exit_keywords]:
                 print('رویامون: به امید ساختن رویامون 🌟')
                 break
-            challenges = rag.generate_challanges(user_input)
-            #notice here need changes
-            # give choosen challange to model
-            response = rag.ask_question(user_input, challange= "")
+            challenges = await rag.generate_challenges(user_input)
+            chosen_challenge = challenges[0]  # or add logic to pick one
+            response = await rag.ask_question(user_input, challange=chosen_challenge)
             print('رویامون:', response)
             print('-' * 50)
             print(challenges)
@@ -285,6 +285,10 @@ def chat_loop(rag):
             continue
 
 
+base_dir = "~/rooyamoon"
+filename = "rag_file1.pdf"
+rag_path = os.path.join(base_dir, filename)
+
 def main():
     rag = GeminiRAG(api_key=api_key)
 
@@ -292,11 +296,11 @@ def main():
         print("📦 Loaded vectorstore from memory.")
     else:
         print("ℹ️ No saved vectorstore found. Embedding from scratch.")
-        pdf_files = ["drive/MyDrive/gemini_rag/rag_file1.pdf"]  # Replace with your file path in Colab
+        pdf_files = [rag_path]  # Replace with your file path in Colab
         load_and_add_documents(rag, pdf_files)
         rag.save_vectorstore()
         print("✅ Vectorstore saved to memory.")
 
-    chat_loop(rag)
+    await chat_loop(rag)
 
 main()
