@@ -114,40 +114,73 @@ class CommentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Comment
-        fields = [
-            'id', 'content', 'card', 'creator', 'mentions',
-            'created_at', 'updated_at', 'like_count'
-        ]
+        fields = '__all__'
         read_only_fields = ['creator', 'like_count']
 
     def get_creator(self, obj):
-        return obj.creator.username if obj.creator and obj.creator.username else obj.creator.id
+        return obj.creator.username if obj.creator else None
+
+    def to_representation(self, instance):
+        """Customize output to show usernames for mentions"""
+        representation = super().to_representation(instance)
+        representation['mentions'] = [user.username for user in instance.mentions.all()]
+        return representation
 
     def create(self, validated_data):
         user = self.context['request'].user
         mentions = validated_data.pop('mentions', [])
-        content = validated_data.get('content', '')
-
         comment = Comment.objects.create(creator=user, **validated_data)
-
-        # Merge explicitly passed mentions with extracted ones
-        extracted_users = extract_mentions(content)
-        all_mentions = list(set(mentions) | set(extracted_users))
-        if all_mentions:
-            comment.mentions.set(all_mentions)
-
+        if mentions:
+            comment.mentions.set(mentions)
         return comment
 
     def update(self, instance, validated_data):
-        mentions = validated_data.pop('mentions', [])
-        instance.content = validated_data.get('content', instance.content)
+        mentions = validated_data.pop('mentions', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         instance.save()
 
-        extracted_users = extract_mentions(instance.content)
-        all_mentions = list(set(mentions) | set(extracted_users))
-        instance.mentions.set(all_mentions)
+        if mentions is not None:
+            instance.mentions.set(mentions)
 
         return instance
+
+
+class CommentWithRepliesCreatorSerializer(serializers.ModelSerializer):
+    creator = serializers.SerializerMethodField()
+    replies = serializers.SerializerMethodField()
+    mentionedUserIds = serializers.SerializerMethodField()
+    parentId = serializers.SerializerMethodField()
+    createdAt = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = [
+            'id',
+            'creator',
+            'content',
+            'mentionedUserIds',
+            'parentId',
+            'createdAt',
+            'replies',
+        ]
+
+    def get_creator(self, obj):
+        return f"u{obj.creator.id}"
+
+    def get_mentionedUserIds(self, obj):
+        return [f"u{user.id}" for user in obj.mentions.all()]
+
+    def get_parentId(self, obj):
+        return f"c{obj.parent.id}" if obj.parent else None
+
+    def get_createdAt(self, obj):
+        return obj.created_at.isoformat()
+
+    def get_replies(self, obj):
+        children = obj.replies.all()
+        return CommentWithRepliesCreatorSerializer(children, many=True, context=self.context).data
 
 
 # class CommentReplySerializer(serializers.ModelSerializer):

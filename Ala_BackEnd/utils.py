@@ -99,6 +99,8 @@ def get_display_username(user):
 
 
 def extract_mentions(content):
-    usernames = set(re.findall(r'@(\w+)', content))
+    # Normalize content by making it lowercase to support case-insensitive matching
+    usernames = set(re.findall(r'@(\w+)', content.lower()))  # Convert content to lowercase
+    # Look for users matching any of the extracted usernames (case-insensitive)
     users = User.objects.filter(username__in=usernames)
     return users

@@ -11,11 +11,11 @@ from rest_framework import status, viewsets, permissions
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from . import serializers
-from .models import User, Card, Notification, Comment, SavedCard, CommentLike #CommentReply, CommentReplyLike,
+from .models import User, Card, Notification, Comment, SavedCard, CommentLike  #CommentReply, CommentReplyLike,
 from .serializers import (
     OTPLoginSerializer, UserSerializer, UserRegistrationSerializer,
     CardSerializer, NotificationSerializer, LoginSerializer, CommentSerializer,
-    SavedCardSerializer, MentionUserSerializer
+    SavedCardSerializer, MentionUserSerializer, CommentWithRepliesCreatorSerializer
     # CommentWithRepliesCreatorSerializer, CommentReplySerializer, CommentWithRepliesSerializer,
 )
 from rest_framework.pagination import PageNumberPagination
@@ -638,12 +638,12 @@ class CommentViewSet(viewsets.ModelViewSet):
             # Save the comment (but don't commit to DB yet)
             comment = serializer.save()
 
-            # Extract mentions from content
-            content = serializer.validated_data.get("content", "")
-            mentioned_users = extract_mentions(content)
-
-            # Add mentioned users to comment
-            comment.mentions.set(mentioned_users)
+            # # Extract mentions from content
+            # content = serializer.validated_data.get("content", "")
+            # mentioned_users = extract_mentions(content)
+            #
+            # # Add mentioned users to comment
+            # comment.mentions.set(mentioned_users)
 
             return Response({
                 "statusCode": 200,
@@ -944,6 +944,87 @@ class CommentViewSet(viewsets.ModelViewSet):
                 "error": str(e),
                 "result": ""
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CardCommentsRepliesAPIView(APIView):
+    permission_classes = []
+
+    @extend_schema(
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 200},
+                    "messages": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["Comments and replies retrieved successfully."]
+                    },
+                    "total": {"type": "integer", "example": 5},
+                    "result": {
+                        "type": "object",
+                        "properties": {
+                            "card_id": {"type": "integer", "example": 1},
+                            "comments": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "integer", "example": 1},
+                                        "content": {"type": "string", "example": "This is a comment"},
+                                        "card": {"type": "integer", "example": 1},
+                                        "creator": {"type": "string", "example": "User1"},
+                                        "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
+                                        "updated_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
+                                        "replies": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {"type": "integer", "example": 1},
+                                                    "comment": {"type": "integer", "example": 1},
+                                                    "user": {"type": "string", "example": "User2"},
+                                                    "content": {"type": "string", "example": "This is a reply"},
+                                                    "created_at": {"type": "string", "example": "2023-03-05T13:00:00Z"}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            404: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 404},
+                    "messages": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["Card not found."]
+                    }
+                }
+            }
+        }
+    )
+    def get(self, request, card_id, format=None):
+        # Retrieve the card or return a 404 response if not found
+        card = get_object_or_404(Card, id=card_id)
+        # Retrieve all comments for this card
+        comments = Comment.objects.filter(card=card).order_by('-created_at')
+        serializer = CommentWithRepliesCreatorSerializer(comments, many=True, context={'request': request})
+
+        return Response({
+            "statusCode": 200,
+            "messages": ["Comments and replies retrieved successfully."],
+            "total": comments.count(),
+            "result": {
+                "card_id": card.id,
+                "comments": serializer.data
+            }
+        }, status=status.HTTP_200_OK)
 
 
 class UpdateCommentView(APIView):

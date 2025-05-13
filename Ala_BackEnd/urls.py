@@ -7,7 +7,7 @@ from .views import (
     CustomTokenRefreshView, SavedCardAPIView,
     SavedCardDeleteAPIView, CommentLikeView,
     CommentUnlikeView, UpdateCommentView,
-    MentionUserListAPIView
+    MentionUserListAPIView, CardCommentsRepliesAPIView
     # CommentReplyViewSet, CardCommentsRepliesAPIView, CommentReplyUpdateViewSet,
     # CommentReplyLikeView, ReplyUnlikeView,
 )
@@ -40,10 +40,12 @@ urlpatterns = [
     path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path('api/cards/<int:card_id>/comments/', CardCommentsRepliesAPIView.as_view(),
+         name='card-comments-replies'),
+
     # path('api/replies/like/', CommentReplyLikeView.as_view(), name='reply-like'),
     # path('api/replies/unlike/', ReplyUnlikeView.as_view(), name='reply-unlike'),
     # path('api/replies', CommentReplyUpdateViewSet.as_view(), name='comment-reply-update'),
-    # path('api/cards/<int:card_id>/comments-replies/', CardCommentsRepliesAPIView.as_view(), name='card-comments-replies'),
     # path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
 ]
 

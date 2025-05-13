@@ -57,6 +57,7 @@ class Comment(models.Model):
     content = models.TextField()
     card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='comments')
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, related_name='replies', null=True, blank=True)
     mentions = models.ManyToManyField(User, related_name="mentioned_in", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, null=True)
