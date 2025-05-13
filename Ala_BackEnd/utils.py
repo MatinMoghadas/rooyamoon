@@ -1,3 +1,4 @@
+import re
 import secrets
 import logging
 import httpx
@@ -17,6 +18,7 @@ timeout = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
 def generate_otp(length=5):
     """Generate a random OTP of specified length."""
     return "".join(str(secrets.randbelow(10)) for _ in range(length))
+
 
 def send_otp(mobile_phone_number, otp):
     """Send OTP via external SMS API using Django settings"""
@@ -78,6 +80,7 @@ def get_or_create_user(mobile_phone_number):
     user, created = User.objects.get_or_create(mobile_phone_number=mobile_phone_number)
     return user
 
+
 def generate_tokens_for_user(user):
     """
     Generates JWT access and refresh tokens for the given user.
@@ -87,3 +90,15 @@ def generate_tokens_for_user(user):
         "access_token": str(refresh.access_token),
         "refresh_token": str(refresh)
     }
+
+
+def get_display_username(user):
+    if user and user.username:
+        return user.username
+    return f"user number {user.id}"
+
+
+def extract_mentions(content):
+    usernames = set(re.findall(r'@(\w+)', content))
+    users = User.objects.filter(username__in=usernames)
+    return users

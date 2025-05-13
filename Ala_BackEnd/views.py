@@ -10,17 +10,17 @@ from rest_framework.response import Response
 from rest_framework import status, viewsets, permissions
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.authentication import JWTAuthentication
-
 from . import serializers
-from .models import User, Card, Notification, Comment, CommentReply, SavedCard, CommentReplyLike, CommentLike
+from .models import User, Card, Notification, Comment, SavedCard, CommentLike #CommentReply, CommentReplyLike,
 from .serializers import (
     OTPLoginSerializer, UserSerializer, UserRegistrationSerializer,
     CardSerializer, NotificationSerializer, LoginSerializer, CommentSerializer,
-    CommentReplySerializer, CommentWithRepliesSerializer, SavedCardSerializer, CommentWithRepliesCreatorSerializer
+    SavedCardSerializer, MentionUserSerializer
+    # CommentWithRepliesCreatorSerializer, CommentReplySerializer, CommentWithRepliesSerializer,
 )
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
-from .utils import generate_otp, verify_otp, get_or_create_user, generate_tokens_for_user
+from .utils import generate_otp, verify_otp, get_or_create_user, generate_tokens_for_user, extract_mentions
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import logging
@@ -111,6 +111,7 @@ class OTPLoginView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
+
 class OTPVerificationView(APIView):
     permission_classes = []  # Allow unauthenticated users
 
@@ -150,39 +151,44 @@ class OTPVerificationView(APIView):
         submitted_otp = serializer.validated_data["otp"]
 
         # Verify OTP
-        if not verify_otp(mobile_phone_number, submitted_otp):  # Use your verify_otp function
+        if not verify_otp(mobile_phone_number, submitted_otp):
             return Response({
                 "statusCode": 401,
                 "messages": ["Invalid or expired OTP."]
             }, status=status.HTTP_401_UNAUTHORIZED)
 
         # Get or create user
-        user = get_or_create_user(mobile_phone_number)  # Use your get_or_create_user function
+        user = get_or_create_user(mobile_phone_number)
+
+        # Ensure username is set
+        if not user.username:
+            user.username = f"{user.id} user"
+            user.save()
 
         # Generate tokens
-        tokens = generate_tokens_for_user(user)  # Use your generate_tokens_for_user function
+        tokens = generate_tokens_for_user(user)
 
         # Clear OTP from cache after successful verification
         cache.delete(f"otp:{mobile_phone_number}")
 
-        # Format the response
         return Response({
             "statusCode": 200,
-            "messages": ["کد کلید با موفقیت ارسال شد."],  # Persian text from image
+            "messages": ["کد کلید با موفقیت ارسال شد."],
             "total": 0,
             "page": 1,
             "perPage": 10,
             "result": {
                 "phoneNumber": mobile_phone_number,
-                "username": user.username if user.username else "N/A",
+                "username": user.username,
                 "email": user.email if user.email else "N/A",
                 "firstName": user.first_name if user.first_name else "N/A",
                 "lastName": user.last_name if user.last_name else "N/A",
-                "dataGathering": True,  # Assuming default value
-                "accessToken": tokens["access_token"],  # Include access token
-                "refreshToken": tokens["refresh_token"],  # Include refresh token
+                "dataGathering": True,
+                "accessToken": tokens["access_token"],
+                "refreshToken": tokens["refresh_token"],
             }
         }, status=status.HTTP_200_OK)
+
 
 class UserProfileView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -195,7 +201,7 @@ class UserProfileView(APIView):
                 "properties": {
                     "statusCode": {"type": "integer", "example": 200},
                     "messages": {"type": "array", "items": {"type": "string"},
-                                "example": ["User profile fetched successfully."]},
+                                 "example": ["User profile fetched successfully."]},
                     "total": {"type": "integer", "example": 0},
                     "page": {"type": "integer", "example": 1},
                     "perPage": {"type": "integer", "example": 10},
@@ -223,7 +229,7 @@ class UserProfileView(APIView):
                 "properties": {
                     "statusCode": {"type": "integer", "example": 200},
                     "messages": {"type": "array", "items": {"type": "string"},
-                                "example": ["Profile updated successfully."]},
+                                 "example": ["Profile updated successfully."]},
                     "total": {"type": "integer", "example": 0},
                     "page": {"type": "integer", "example": 1},
                     "perPage": {"type": "integer", "example": 10},
@@ -235,7 +241,7 @@ class UserProfileView(APIView):
                 "properties": {
                     "statusCode": {"type": "integer", "example": 400},
                     "messages": {"type": "array", "items": {"type": "string"},
-                                "example": ["Failed to update profile."]},
+                                 "example": ["Failed to update profile."]},
                     "errors": {"type": "object"}
                 }
             }
@@ -259,10 +265,12 @@ class UserProfileView(APIView):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class CustomPagination(PageNumberPagination):
     page_size = 10  # Assuming you want to show 10 cards per page
     page_size_query_param = 'page_size'  # Allow client to set page size
     max_page_size = 100  # Limit the maximum page size
+
 
 class CardViewSet(viewsets.ModelViewSet):
     queryset = Card.objects.all().order_by('-created_at')
@@ -577,6 +585,7 @@ class CardViewSet(viewsets.ModelViewSet):
             "messages": ["Card deleted successfully."]
         }, status=status.HTTP_204_NO_CONTENT)
 
+
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.all().order_by('-created_at')
     serializer_class = CommentSerializer
@@ -591,17 +600,9 @@ class CommentViewSet(viewsets.ModelViewSet):
 
         card = get_object_or_404(Card, id=card)  # Fetch card instance
         serializer.save(creator=self.request.user, card=card)  # Save with creator & card
+
     @extend_schema(
-        request={
-            "application/json": {
-                "type": "object",
-                "properties": {
-                    "content": {"type": "string", "example": "This is a new comment"},
-                    "card": {"type": "integer", "example": 1}
-                },
-                "required": ["content", "card_id"]
-            }
-        },
+        request=CommentSerializer,
         responses={
             200: {
                 "type": "object",
@@ -613,10 +614,9 @@ class CommentViewSet(viewsets.ModelViewSet):
                         "type": "object",
                         "properties": {
                             "id": {"type": "integer", "example": 1},
-                            "content": {"type": "string", "example": "This is a new comment"},
-                            "creator": {"type": "string", "example": "Creator Username"},
-                            "card_id": {"type": "integer", "example": 1},
-                            "created_at": {"type": "string", "example": "2025-03-16T12:34:56Z"}
+                            "content": {"type": "string", "example": "New comment"},
+                            "creator": {"type": "string", "example": "username"},
+                            "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
                         }
                     }
                 }
@@ -633,20 +633,22 @@ class CommentViewSet(viewsets.ModelViewSet):
         }
     )
     def create(self, request, *args, **kwargs):
-        if "card" not in request.data:
-            return Response({
-                "statusCode": 400,
-                "messages": ["Failed to create comment. Missing 'card_id'."],
-                "errors": {"card_id": ["This field is required."]}
-            }, status=status.HTTP_400_BAD_REQUEST)
-
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            self.perform_create(serializer)
+            # Save the comment (but don't commit to DB yet)
+            comment = serializer.save()
+
+            # Extract mentions from content
+            content = serializer.validated_data.get("content", "")
+            mentioned_users = extract_mentions(content)
+
+            # Add mentioned users to comment
+            comment.mentions.set(mentioned_users)
+
             return Response({
                 "statusCode": 200,
                 "messages": ["Comment created successfully."],
-                "result": serializer.data
+                "result": self.get_serializer(comment).data
             }, status=status.HTTP_200_OK)
 
         return Response({
@@ -943,8 +945,9 @@ class CommentViewSet(viewsets.ModelViewSet):
                 "result": ""
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class UpdateCommentView(APIView):
-    """API endpoint for updating a comment using `comment_id` in the request body."""
+    """API endpoint for updating a comment using comment_id in the request body."""
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
 
@@ -954,7 +957,12 @@ class UpdateCommentView(APIView):
                 "type": "object",
                 "properties": {
                     "comment_id": {"type": "integer", "example": 1},
-                    "content": {"type": "string", "example": "Updated comment content"}
+                    "content": {"type": "string", "example": "Updated comment with @username"},
+                    "mentions": {
+                        "type": "array",
+                        "items": {"type": "integer", "example": 2},
+                        "description": "Optional list of user IDs to mention"
+                    }
                 },
                 "required": ["comment_id", "content"]
             }
@@ -972,6 +980,11 @@ class UpdateCommentView(APIView):
                             "id": {"type": "integer", "example": 1},
                             "content": {"type": "string", "example": "Updated comment content"},
                             "creator": {"type": "string", "example": "Creator Username"},
+                            "mentions": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "example": ["admin", "john_doe"]
+                            },
                             "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
                         }
                     }
@@ -991,13 +1004,13 @@ class UpdateCommentView(APIView):
                 "properties": {
                     "statusCode": {"type": "integer", "example": 404},
                     "messages": {"type": "array", "items": {"type": "string"},
-                                 "example": ["Comment not found."]},
+                                 "example": ["Comment not found."]}
                 }
             }
         }
     )
     def put(self, request, *args, **kwargs):
-        """Update a comment by providing `comment_id` in the request body."""
+        """Update a comment by providing comment_id in the request body."""
         comment_id = request.data.get("comment_id")
 
         if not comment_id:
@@ -1007,583 +1020,603 @@ class UpdateCommentView(APIView):
                 "errors": {"comment_id": ["This field is required."]}
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get the comment object
+        # Get the comment
         comment = get_object_or_404(Comment, id=comment_id)
 
-        # Validate & update the comment
-        serializer = CommentSerializer(comment, data=request.data, partial=True)
+        # Check permissions
+        if request.user != comment.creator and not request.user.is_staff:
+            return Response({
+                "statusCode": 403,
+                "messages": ["You do not have permission to update this comment."]
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # Deserialize and validate
+        serializer = CommentSerializer(comment, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
+
+            # Extract mentions from content and merge with explicitly passed mentions
+            updated_content = serializer.validated_data.get("content", "")
+            content_mentions = extract_mentions(updated_content)
+            passed_mentions = serializer.validated_data.get("mentions", [])
+
+            # Combine both (avoid duplicates)
+            all_mentions = list(set(passed_mentions) | set(content_mentions))
+            comment.mentions.set(all_mentions)
+
             return Response({
                 "statusCode": 200,
                 "messages": ["Comment updated successfully."],
                 "result": serializer.data
             }, status=status.HTTP_200_OK)
-        else:
-            return Response({
-                "statusCode": 400,
-                "messages": ["Failed to update comment."],
-                "errors": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class CommentReplyViewSet(viewsets.ModelViewSet):
-    queryset = CommentReply.objects.all().order_by('-created_at')  # Order by latest replies
-    serializer_class = CommentReplySerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated]  # Only authenticated users can reply
-
-    def perform_create(self, serializer):
-        """Assign the logged-in user as the creator of the reply"""
-        serializer.save(user=self.request.user)
-
-
-    @extend_schema(
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Replies retrieved successfully."]
-                    },
-                    "total": {"type": "integer", "example": 10},
-                    "result": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "integer", "example": 1},
-                                "content": {"type": "string", "example": "This is a reply"},
-                                "user": {"type": "string", "example": "Username"},
-                                "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
-                            }
-                        }
-                    }
-                }
-            },
-            404: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 404},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment not found."]
-                    }
-                }
-            }
-        }
-    )
-    @action(detail=False, methods=['get'], url_path='by-comment/(?P<comment_id>[^/.]+)')
-    def get_replies_by_comment(self, request, comment_id):
-        """
-        Get all replies for a specific comment ID
-        """
-        comment = get_object_or_404(Comment, id=comment_id)
-        replies = CommentReply.objects.filter(comment=comment).order_by('-created_at')
-        serializer = self.get_serializer(replies, many=True)
-
-        return Response({
-            "statusCode": 200,
-            "messages": ["Replies retrieved successfully."],
-            "total": replies.count(),
-            "result": serializer.data
-        }, status=status.HTTP_200_OK)
-
-    @extend_schema(
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment replies retrieved successfully."]
-                    },
-                    "total": {"type": "integer", "example": 50},
-                    "page": {"type": "integer", "example": 1},
-                    "perPage": {"type": "integer", "example": 10},
-                    "result": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "integer", "example": 1},
-                                "content": {"type": "string", "example": "This is a reply"},
-                                "user": {"type": "string", "example": "Username"},
-                                "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    )
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)  # Paginate the queryset
-
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({
-            "statusCode": 200,
-            "messages": ["Comment replies retrieved successfully."],
-            "total": queryset.count(),
-            "page": 1,
-            "perPage": queryset.count() if queryset.count() > 0 else 1,
-            "result": serializer.data
-        }, status=status.HTTP_200_OK)
-
-    def get_paginated_response(self, data):
-        """
-        Customize the paginated response format.
-        """
-        return Response({
-            "statusCode": 200,
-            "messages": ["Comment replies retrieved successfully."],
-            "total": self.paginator.page.paginator.count,
-            "page": self.paginator.page.number,
-            "perPage": self.paginator.page.paginator.per_page,
-            "result": data,
-        })
-
-    @extend_schema(
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment reply created successfully."]
-                    },
-                    "result": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "integer", "example": 1},
-                            "content": {"type": "string", "example": "This is a newly created reply"},
-                            "user": {"type": "string", "example": "Username"},
-                            "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
-                        }
-                    }
-                }
-            },
-            400: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 400},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Failed to create comment reply."]
-                    },
-                    "errors": {"type": "object"}
-                }
-            }
-        }
-    )
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-
-        if serializer.is_valid():
-            comment = request.data.get("comment")  # Extract comment_id
-
-            if not comment:
-                return Response({
-                    "statusCode": 400,
-                    "messages": ["comment_id is required."],
-                    "errors": {"comment_id": ["This field is required."]}
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            comment = get_object_or_404(Comment, id=comment)  # Ensure comment exists
-
-            # Save with user instead of creator
-            serializer.save(comment=comment, user=request.user)
-
-            return Response({
-                "statusCode": 200,
-                "messages": ["Comment reply created successfully."],
-                "result": serializer.data
-            }, status=status.HTTP_200_OK)
 
         return Response({
             "statusCode": 400,
-            "messages": ["Failed to create comment reply."],
+            "messages": ["Failed to update comment."],
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    @extend_schema(
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment reply retrieved successfully."]
-                    },
-                    "result": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "integer", "example": 1},
-                            "content": {"type": "string", "example": "This is a reply"},
-                            "user": {"type": "string", "example": "Username"},
-                            "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
-                        }
-                    }
-                }
-            },
-            404: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 404},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment reply not found."]
-                    }
-                }
-            }
-        }
-    )
-    def retrieve(self, request, pk=None, *args, **kwargs):
-        instance = get_object_or_404(CommentReply, pk=pk)
-        serializer = self.get_serializer(instance)
-        return Response({
-            "statusCode": 200,
-            "messages": ["Comment reply retrieved successfully."],
-            "result": serializer.data
-        }, status=status.HTTP_200_OK)
 
-    # @extend_schema(
-    #     responses={
-    #         200: {
-    #             "type": "object",
-    #             "properties": {
-    #                 "statusCode": {"type": "integer", "example": 200},
-    #                 "messages": {
-    #                     "type": "array",
-    #                     "items": {"type": "string"},
-    #                     "example": ["Comment reply updated successfully."]
-    #                 },
-    #                 "result": {
-    #                     "type": "object",
-    #                     "properties": {
-    #                         "id": {"type": "integer", "example": 1},
-    #                         "content": {"type": "string", "example": "This is an updated reply"},
-    #                         "user": {"type": "string", "example": "Username"},
-    #                         "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
-    #                     }
-    #                 }
-    #             }
-    #         },
-    #         400: {
-    #             "type": "object",
-    #             "properties": {
-    #                 "statusCode": {"type": "integer", "example": 400},
-    #                 "messages": {
-    #                     "type": "array",
-    #                     "items": {"type": "string"},
-    #                     "example": ["Failed to update comment reply."]
-    #                 },
-    #                 "errors": {"type": "object"}
-    #             }
-    #         }
-    #     }
-    # )
-    # def update(self, request, pk=None, *args, **kwargs):
-    #     instance = self.get_object()
-    #     serializer = self.get_serializer(instance, data=request.data, partial=False)
-    #     if serializer.is_valid():
-    #         serializer.save()
-    #         return Response({
-    #             "statusCode": 200,
-    #             "messages": ["Comment reply updated successfully."],
-    #             "result": serializer.data
-    #         }, status=status.HTTP_200_OK)
-    #     return Response({
-    #         "statusCode": 400,
-    #         "messages": ["Failed to update comment reply."],
-    #         "errors": serializer.errors
-    #     }, status=status.HTTP_400_BAD_REQUEST)
+# class CommentReplyViewSet(viewsets.ModelViewSet):
+#     queryset = CommentReply.objects.all().order_by('-created_at')  # Order by latest replies
+#     serializer_class = CommentReplySerializer
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [permissions.IsAuthenticated]  # Only authenticated users can reply
+#
+#     def perform_create(self, serializer):
+#         """Assign the logged-in user as the creator of the reply"""
+#         serializer.save(user=self.request.user)
+#
+#     @extend_schema(
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Replies retrieved successfully."]
+#                     },
+#                     "total": {"type": "integer", "example": 10},
+#                     "result": {
+#                         "type": "array",
+#                         "items": {
+#                             "type": "object",
+#                             "properties": {
+#                                 "id": {"type": "integer", "example": 1},
+#                                 "content": {"type": "string", "example": "This is a reply"},
+#                                 "user": {"type": "string", "example": "Username"},
+#                                 "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+#                             }
+#                         }
+#                     }
+#                 }
+#             },
+#             404: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 404},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment not found."]
+#                     }
+#                 }
+#             }
+#         }
+#     )
+#     @action(detail=False, methods=['get'], url_path='by-comment/(?P<comment_id>[^/.]+)')
+#     def get_replies_by_comment(self, request, comment_id):
+#         """
+#         Get all replies for a specific comment ID
+#         """
+#         comment = get_object_or_404(Comment, id=comment_id)
+#         replies = CommentReply.objects.filter(comment=comment).order_by('-created_at')
+#         serializer = self.get_serializer(replies, many=True)
+#
+#         return Response({
+#             "statusCode": 200,
+#             "messages": ["Replies retrieved successfully."],
+#             "total": replies.count(),
+#             "result": serializer.data
+#         }, status=status.HTTP_200_OK)
+#
+#     @extend_schema(
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment replies retrieved successfully."]
+#                     },
+#                     "total": {"type": "integer", "example": 50},
+#                     "page": {"type": "integer", "example": 1},
+#                     "perPage": {"type": "integer", "example": 10},
+#                     "result": {
+#                         "type": "array",
+#                         "items": {
+#                             "type": "object",
+#                             "properties": {
+#                                 "id": {"type": "integer", "example": 1},
+#                                 "content": {"type": "string", "example": "This is a reply"},
+#                                 "user": {"type": "string", "example": "Username"},
+#                                 "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+#                             }
+#                         }
+#                     }
+#                 }
+#             }
+#         }
+#     )
+#     def list(self, request, *args, **kwargs):
+#         queryset = self.get_queryset()
+#         page = self.paginate_queryset(queryset)  # Paginate the queryset
+#
+#         if page is not None:
+#             serializer = self.get_serializer(page, many=True)
+#             return self.get_paginated_response(serializer.data)
+#
+#         serializer = self.get_serializer(queryset, many=True)
+#         return Response({
+#             "statusCode": 200,
+#             "messages": ["Comment replies retrieved successfully."],
+#             "total": queryset.count(),
+#             "page": 1,
+#             "perPage": queryset.count() if queryset.count() > 0 else 1,
+#             "result": serializer.data
+#         }, status=status.HTTP_200_OK)
+#
+#     def get_paginated_response(self, data):
+#         """
+#         Customize the paginated response format.
+#         """
+#         return Response({
+#             "statusCode": 200,
+#             "messages": ["Comment replies retrieved successfully."],
+#             "total": self.paginator.page.paginator.count,
+#             "page": self.paginator.page.number,
+#             "perPage": self.paginator.page.paginator.per_page,
+#             "result": data,
+#         })
+#
+#     @extend_schema(
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment reply created successfully."]
+#                     },
+#                     "result": {
+#                         "type": "object",
+#                         "properties": {
+#                             "id": {"type": "integer", "example": 1},
+#                             "content": {"type": "string", "example": "This is a newly created reply"},
+#                             "user": {"type": "string", "example": "Username"},
+#                             "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+#                         }
+#                     }
+#                 }
+#             },
+#             400: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 400},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Failed to create comment reply."]
+#                     },
+#                     "errors": {"type": "object"}
+#                 }
+#             }
+#         }
+#     )
+#     def create(self, request, *args, **kwargs):
+#         serializer = self.get_serializer(data=request.data)
+#
+#         if serializer.is_valid():
+#             comment = request.data.get("comment")  # Extract comment_id
+#
+#             if not comment:
+#                 return Response({
+#                     "statusCode": 400,
+#                     "messages": ["comment_id is required."],
+#                     "errors": {"comment_id": ["This field is required."]}
+#                 }, status=status.HTTP_400_BAD_REQUEST)
+#
+#             comment = get_object_or_404(Comment, id=comment)  # Ensure comment exists
+#
+#             # Save with user instead of creator
+#             serializer.save(comment=comment, user=request.user)
+#
+#             return Response({
+#                 "statusCode": 200,
+#                 "messages": ["Comment reply created successfully."],
+#                 "result": serializer.data
+#             }, status=status.HTTP_200_OK)
+#
+#         return Response({
+#             "statusCode": 400,
+#             "messages": ["Failed to create comment reply."],
+#             "errors": serializer.errors
+#         }, status=status.HTTP_400_BAD_REQUEST)
+#
+#     @extend_schema(
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment reply retrieved successfully."]
+#                     },
+#                     "result": {
+#                         "type": "object",
+#                         "properties": {
+#                             "id": {"type": "integer", "example": 1},
+#                             "content": {"type": "string", "example": "This is a reply"},
+#                             "user": {"type": "string", "example": "Username"},
+#                             "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+#                         }
+#                     }
+#                 }
+#             },
+#             404: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 404},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment reply not found."]
+#                     }
+#                 }
+#             }
+#         }
+#     )
+#     def retrieve(self, request, pk=None, *args, **kwargs):
+#         instance = get_object_or_404(CommentReply, pk=pk)
+#         serializer = self.get_serializer(instance)
+#         return Response({
+#             "statusCode": 200,
+#             "messages": ["Comment reply retrieved successfully."],
+#             "result": serializer.data
+#         }, status=status.HTTP_200_OK)
+#
+#     # @extend_schema(
+#     #     responses={
+#     #         200: {
+#     #             "type": "object",
+#     #             "properties": {
+#     #                 "statusCode": {"type": "integer", "example": 200},
+#     #                 "messages": {
+#     #                     "type": "array",
+#     #                     "items": {"type": "string"},
+#     #                     "example": ["Comment reply updated successfully."]
+#     #                 },
+#     #                 "result": {
+#     #                     "type": "object",
+#     #                     "properties": {
+#     #                         "id": {"type": "integer", "example": 1},
+#     #                         "content": {"type": "string", "example": "This is an updated reply"},
+#     #                         "user": {"type": "string", "example": "Username"},
+#     #                         "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+#     #                     }
+#     #                 }
+#     #             }
+#     #         },
+#     #         400: {
+#     #             "type": "object",
+#     #             "properties": {
+#     #                 "statusCode": {"type": "integer", "example": 400},
+#     #                 "messages": {
+#     #                     "type": "array",
+#     #                     "items": {"type": "string"},
+#     #                     "example": ["Failed to update comment reply."]
+#     #                 },
+#     #                 "errors": {"type": "object"}
+#     #             }
+#     #         }
+#     #     }
+#     # )
+#     # def update(self, request, pk=None, *args, **kwargs):
+#     #     instance = self.get_object()
+#     #     serializer = self.get_serializer(instance, data=request.data, partial=False)
+#     #     if serializer.is_valid():
+#     #         serializer.save()
+#     #         return Response({
+#     #             "statusCode": 200,
+#     #             "messages": ["Comment reply updated successfully."],
+#     #             "result": serializer.data
+#     #         }, status=status.HTTP_200_OK)
+#     #     return Response({
+#     #         "statusCode": 400,
+#     #         "messages": ["Failed to update comment reply."],
+#     #         "errors": serializer.errors
+#     #     }, status=status.HTTP_400_BAD_REQUEST)
+#
+#     @extend_schema(
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment reply partially updated successfully."]
+#                     },
+#                     "result": {
+#                         "type": "object",
+#                         "properties": {
+#                             "id": {"type": "integer", "example": 1},
+#                             "content": {"type": "string", "example": "This is an updated reply"},
+#                             "user": {"type": "string", "example": "Username"},
+#                             "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+#                         }
+#                     }
+#                 }
+#             },
+#             400: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 400},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Failed to partially update comment reply."]
+#                     },
+#                     "errors": {"type": "object"}
+#                 }
+#             }
+#         }
+#     )
+#     def partial_update(self, request, pk=None, *args, **kwargs):
+#         instance = self.get_object()
+#         serializer = self.get_serializer(instance, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({
+#                 "statusCode": 200,
+#                 "messages": ["Comment reply partially updated successfully."],
+#                 "result": serializer.data
+#             }, status=status.HTTP_200_OK)
+#         return Response({
+#             "statusCode": 400,
+#             "messages": ["Failed to partially update comment reply."],
+#             "errors": serializer.errors
+#         }, status=status.HTTP_400_BAD_REQUEST)
+#
+#     @extend_schema(
+#         responses={
+#             204: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 204},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment reply deleted successfully."]
+#                     }
+#                 }
+#             },
+#             404: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 404},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment reply not found."]
+#                     }
+#                 }
+#             }
+#         }
+#     )
+#     def destroy(self, request, pk=None, *args, **kwargs):
+#         instance = self.get_object()
+#         self.perform_destroy(instance)
+#         return Response({
+#             "statusCode": 204,
+#             "messages": ["Comment reply deleted successfully."],
+#             "result": ""
+#         }, status=status.HTTP_204_NO_CONTENT)
 
-    @extend_schema(
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment reply partially updated successfully."]
-                    },
-                    "result": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "integer", "example": 1},
-                            "content": {"type": "string", "example": "This is an updated reply"},
-                            "user": {"type": "string", "example": "Username"},
-                            "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
-                        }
-                    }
-                }
-            },
-            400: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 400},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Failed to partially update comment reply."]
-                    },
-                    "errors": {"type": "object"}
-                }
-            }
-        }
-    )
-    def partial_update(self, request, pk=None, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({
-                "statusCode": 200,
-                "messages": ["Comment reply partially updated successfully."],
-                "result": serializer.data
-            }, status=status.HTTP_200_OK)
-        return Response({
-            "statusCode": 400,
-            "messages": ["Failed to partially update comment reply."],
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
 
-    @extend_schema(
-        responses={
-            204: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 204},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment reply deleted successfully."]
-                    }
-                }
-            },
-            404: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 404},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment reply not found."]
-                    }
-                }
-            }
-        }
-    )
-    def destroy(self, request, pk=None, *args, **kwargs):
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response({
-            "statusCode": 204,
-            "messages": ["Comment reply deleted successfully."],
-            "result": ""
-        }, status=status.HTTP_204_NO_CONTENT)
+# class CommentReplyUpdateViewSet(GenericAPIView):
+#     queryset = CommentReply.objects.all().order_by('-created_at')
+#     serializer_class = CommentReplySerializer
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [permissions.IsAuthenticated]
+#
+#     @extend_schema(
+#         request={
+#             "type": "object",
+#             "properties": {
+#                 "id": {"type": "integer", "example": 1},
+#                 "content": {"type": "string", "example": "This is an updated reply"}
+#             },
+#             "required": ["id", "content"]
+#         },
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": dict(statusCode={"type": "integer", "example": 200}, messages={
+#                     "type": "array",
+#                     "items": {"type": "string"},
+#                     "example": ["Comment reply updated successfully."]
+#                 }, result={
+#                     "type": "object",
+#                     "properties": {
+#                         "id": {"type": "integer", "example": 1},
+#                         "content": {"type": "string", "example": "This is an updated reply"},
+#                         "user": {"type": "string", "example": "Username"},
+#                         "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+#                     }
+#                 })
+#             },
+#             400: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 400},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Failed to update comment reply."]
+#                     },
+#                     "errors": {"type": "object"}
+#                 }
+#             },
+#             403: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 403},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["You do not have permission to edit this comment reply."]
+#                     }
+#                 }
+#             },
+#             404: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 404},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comment reply not found."]
+#                     }
+#                 }
+#             }
+#         }
+#     )
+#     def update(self, request, *args, **kwargs):
+#         """
+#         Update a comment reply. The ID is taken from the request body, not the URL.
+#         """
+#         comment_id = request.data.get("id")
+#         if not comment_id:
+#             return Response({
+#                 "statusCode": 400,
+#                 "messages": ["ID is required in the request body."]
+#             }, status=status.HTTP_400_BAD_REQUEST)
+#
+#         instance = get_object_or_404(CommentReply, pk=comment_id)
+#
+#         # Check if the user is the owner of the comment or an admin
+#         if request.user != instance.user and not request.user.is_staff:
+#             return Response({
+#                 "statusCode": 403,
+#                 "messages": ["You do not have permission to edit this comment reply."]
+#             }, status=status.HTTP_403_FORBIDDEN)
+#
+#         serializer = self.get_serializer(instance, data=request.data, partial=False)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({
+#                 "statusCode": 200,
+#                 "messages": ["Comment reply updated successfully."],
+#                 "result": serializer.data
+#             }, status=status.HTTP_200_OK)
+#
+#         return Response({
+#             "statusCode": 400,
+#             "messages": ["Failed to update comment reply."],
+#             "errors": serializer.errors
+#         }, status=status.HTTP_400_BAD_REQUEST)
 
-class CommentReplyUpdateViewSet(GenericAPIView):
-    queryset = CommentReply.objects.all().order_by('-created_at')
-    serializer_class = CommentReplySerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
 
-    @extend_schema(
-        request={
-            "type": "object",
-            "properties": {
-                "id": {"type": "integer", "example": 1},
-                "content": {"type": "string", "example": "This is an updated reply"}
-            },
-            "required": ["id", "content"]
-        },
-        responses={
-            200: {
-                "type": "object",
-                "properties": dict(statusCode={"type": "integer", "example": 200}, messages={
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "example": ["Comment reply updated successfully."]
-                }, result={
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "integer", "example": 1},
-                        "content": {"type": "string", "example": "This is an updated reply"},
-                        "user": {"type": "string", "example": "Username"},
-                        "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
-                    }
-                })
-            },
-            400: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 400},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Failed to update comment reply."]
-                    },
-                    "errors": {"type": "object"}
-                }
-            },
-            403: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 403},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["You do not have permission to edit this comment reply."]
-                    }
-                }
-            },
-            404: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 404},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comment reply not found."]
-                    }
-                }
-            }
-        }
-    )
-    def update(self, request, *args, **kwargs):
-        """
-        Update a comment reply. The ID is taken from the request body, not the URL.
-        """
-        comment_id = request.data.get("id")
-        if not comment_id:
-            return Response({
-                "statusCode": 400,
-                "messages": ["ID is required in the request body."]
-            }, status=status.HTTP_400_BAD_REQUEST)
+# class CardCommentsRepliesAPIView(APIView):
+#     permission_classes = []
+#
+#     @extend_schema(
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comments and replies retrieved successfully."]
+#                     },
+#                     "total": {"type": "integer", "example": 5},
+#                     "result": {
+#                         "type": "object",
+#                         "properties": {
+#                             "card_id": {"type": "integer", "example": 1},
+#                             "comments": {
+#                                 "type": "array",
+#                                 "items": {
+#                                     "type": "object",
+#                                     "properties": {
+#                                         "id": {"type": "integer", "example": 1},
+#                                         "content": {"type": "string", "example": "This is a comment"},
+#                                         "card": {"type": "integer", "example": 1},
+#                                         "creator": {"type": "string", "example": "User1"},
+#                                         "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
+#                                         "updated_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
+#                                         "replies": {
+#                                             "type": "array",
+#                                             "items": {
+#                                                 "type": "object",
+#                                                 "properties": {
+#                                                     "id": {"type": "integer", "example": 1},
+#                                                     "comment": {"type": "integer", "example": 1},
+#                                                     "user": {"type": "string", "example": "User2"},
+#                                                     "content": {"type": "string", "example": "This is a reply"},
+#                                                     "created_at": {"type": "string", "example": "2023-03-05T13:00:00Z"}
+#                                                 }
+#                                             }
+#                                         }
+#                                     }
+#                                 }
+#                             }
+#                         }
+#                     }
+#                 }
+#             },
+#             404: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 404},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Card not found."]
+#                     }
+#                 }
+#             }
+#         }
+#     )
+#     def get(self, request, card_id, format=None):
+#         # Retrieve the card or return a 404 response if not found
+#         card = get_object_or_404(Card, id=card_id)
+#         # Retrieve all comments for this card
+#         comments = Comment.objects.filter(card=card).order_by('-created_at')
+#         serializer = CommentWithRepliesCreatorSerializer(comments, many=True, context={'request': request})
+#
+#         return Response({
+#             "statusCode": 200,
+#             "messages": ["Comments and replies retrieved successfully."],
+#             "total": comments.count(),
+#             "result": {
+#                 "card_id": card.id,
+#                 "comments": serializer.data
+#             }
+#         }, status=status.HTTP_200_OK)
 
-        instance = get_object_or_404(CommentReply, pk=comment_id)
-
-        # Check if the user is the owner of the comment or an admin
-        if request.user != instance.user and not request.user.is_staff:
-            return Response({
-                "statusCode": 403,
-                "messages": ["You do not have permission to edit this comment reply."]
-            }, status=status.HTTP_403_FORBIDDEN)
-
-        serializer = self.get_serializer(instance, data=request.data, partial=False)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({
-                "statusCode": 200,
-                "messages": ["Comment reply updated successfully."],
-                "result": serializer.data
-            }, status=status.HTTP_200_OK)
-
-        return Response({
-            "statusCode": 400,
-            "messages": ["Failed to update comment reply."],
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-class CardCommentsRepliesAPIView(APIView):
-    permission_classes = []
-
-    @extend_schema(
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comments and replies retrieved successfully."]
-                    },
-                    "total": {"type": "integer", "example": 5},
-                    "result": {
-                        "type": "object",
-                        "properties": {
-                            "card_id": {"type": "integer", "example": 1},
-                            "comments": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": {"type": "integer", "example": 1},
-                                        "content": {"type": "string", "example": "This is a comment"},
-                                        "card": {"type": "integer", "example": 1},
-                                        "creator": {"type": "string", "example": "User1"},
-                                        "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
-                                        "updated_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
-                                        "replies": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "id": {"type": "integer", "example": 1},
-                                                    "comment": {"type": "integer", "example": 1},
-                                                    "user": {"type": "string", "example": "User2"},
-                                                    "content": {"type": "string", "example": "This is a reply"},
-                                                    "created_at": {"type": "string", "example": "2023-03-05T13:00:00Z"}
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            404: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 404},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Card not found."]
-                    }
-                }
-            }
-        }
-    )
-    def get(self, request, card_id, format=None):
-        # Retrieve the card or return a 404 response if not found
-        card = get_object_or_404(Card, id=card_id)
-        # Retrieve all comments for this card
-        comments = Comment.objects.filter(card=card).order_by('-created_at')
-        serializer = CommentWithRepliesCreatorSerializer(comments, many=True, context={'request': request})
-
-        return Response({
-            "statusCode": 200,
-            "messages": ["Comments and replies retrieved successfully."],
-            "total": comments.count(),
-            "result": {
-                "card_id": card.id,
-                "comments": serializer.data
-            }
-        }, status=status.HTTP_200_OK)
 
 class CustomTokenRefreshView(TokenRefreshView):
     @extend_schema(
@@ -1651,6 +1684,7 @@ class CustomTokenRefreshView(TokenRefreshView):
                 "refreshToken": refresh_token  # Include the provided refresh token
             }
         }, status=status.HTTP_200_OK)
+
 
 class SavedCardAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -1848,6 +1882,7 @@ class SavedCardAPIView(APIView):
     #             "messages": ["Database error occurred while deleting the card."]
     #         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 class SavedCardDeleteAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -1903,6 +1938,7 @@ class SavedCardDeleteAPIView(APIView):
                 "messages": ["Database error occurred while deleting the card."],
                 "result": ""
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class CommentLikeView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1980,6 +2016,7 @@ class CommentLikeView(APIView):
             "result": serializer.data
         }, status=status.HTTP_200_OK)
 
+
 class CommentUnlikeView(GenericAPIView):
     """View to handle unliking a comment."""
 
@@ -2056,94 +2093,174 @@ class CommentUnlikeView(GenericAPIView):
             "result": serializer.data
         }, status=status.HTTP_200_OK)
 
-class CommentReplyLikeView(APIView):
+
+# class CommentReplyLikeView(APIView):
+#     permission_classes = [IsAuthenticated]
+#
+#     @extend_schema(
+#         summary="Like a reply",
+#         description="Like a specific reply by providing the `reply_id` in the request body.",
+#         request={
+#             "application/json": {
+#                 "type": "object",
+#                 "properties": {
+#                     "reply_id": {"type": "integer", "example": 1}
+#                 },
+#                 "required": ["reply_id"]
+#             }
+#         },
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "message": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Like added successfully"]
+#                     },
+#                     "result": {"type": "object"}  # Placeholder for serialized reply data
+#                 }
+#             },
+#             400: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 400},
+#                     "message": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Already liked", "Reply ID is required"]
+#                     },
+#                     "result": {}
+#                 }
+#             }
+#         }
+#     )
+#     def post(self, request):
+#         """Like a reply by providing reply_id in the request body"""
+#         user = request.user
+#         reply_id = request.data.get("reply_id")
+#
+#         if not reply_id:
+#             return Response({
+#                 "statusCode": 400,
+#                 "message": ["Reply ID is required"],
+#                 "result": []
+#             }, status=status.HTTP_400_BAD_REQUEST)
+#
+#         reply = get_object_or_404(CommentReply, id=reply_id)
+#
+#         if CommentReplyLike.objects.filter(user=user, reply=reply).exists():
+#             return Response({
+#                 "statusCode": 400,
+#                 "message": ["Already liked"],
+#                 "result": []
+#             }, status=status.HTTP_400_BAD_REQUEST)
+#
+#         # Create Like Entry
+#         CommentReplyLike.objects.create(user=user, reply=reply)
+#         reply.like_count += 1
+#         reply.save()
+#
+#         # Serialize and return updated reply
+#         serializer = CommentReplySerializer(reply, context={"request": request})
+#         return Response({
+#             "statusCode": 200,
+#             "message": ["Like added successfully"],
+#             "result": serializer.data
+#         }, status=status.HTTP_200_OK)
+#
+#
+# class ReplyUnlikeView(GenericAPIView):
+#     """View to handle unliking a reply."""
+#
+#     @extend_schema(
+#         summary="Unlike a reply",
+#         description="Unlike a specific reply by providing the `reply_id` in the query parameters.",
+#         parameters=[
+#             OpenApiParameter(
+#                 name="reply_id",
+#                 description="ID of the reply to unlike",
+#                 required=True,
+#                 type=OpenApiTypes.INT
+#             )
+#         ],
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "message": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Like removed successfully"]
+#                     },
+#                     "result": {"type": "object"}  # Placeholder for serialized reply data
+#                 }
+#             },
+#             400: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 400},
+#                     "message": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Not liked yet", "Reply ID is required"]
+#                     },
+#                     "result": {}
+#                 }
+#             }
+#         }
+#     )
+#     def delete(self, request):
+#         """Unlike a reply by providing `reply_id` in the query parameters"""
+#         user = request.user
+#         reply_id = request.query_params.get("reply_id")  # ✅ Read from query parameters
+#
+#         if not reply_id:
+#             return Response({
+#                 "statusCode": 400,
+#                 "message": ["Reply ID is required"],
+#                 "result": []
+#             }, status=status.HTTP_400_BAD_REQUEST)
+#
+#         reply = get_object_or_404(CommentReply, id=reply_id)
+#
+#         like = CommentReplyLike.objects.filter(user=user, reply=reply).first()
+#         if not like:
+#             return Response({
+#                 "statusCode": 400,
+#                 "message": ["Not liked yet"],
+#                 "result": []
+#             }, status=status.HTTP_400_BAD_REQUEST)
+#
+#         # Remove Like
+#         like.delete()
+#         reply.like_count -= 1
+#         reply.save()
+#
+#         # Serialize and return updated reply
+#         serializer = CommentReplySerializer(reply, context={"request": request})
+#         return Response({
+#             "statusCode": 200,
+#             "message": ["Like removed successfully"],
+#             "result": serializer.data
+#         }, status=status.HTTP_200_OK)
+
+
+class MentionUserListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        summary="Like a reply",
-        description="Like a specific reply by providing the `reply_id` in the request body.",
-        request={
-            "application/json": {
-                "type": "object",
-                "properties": {
-                    "reply_id": {"type": "integer", "example": 1}
-                },
-                "required": ["reply_id"]
-            }
-        },
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "message": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Like added successfully"]
-                    },
-                    "result": {"type": "object"}  # Placeholder for serialized reply data
-                }
-            },
-            400: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 400},
-                    "message": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Already liked", "Reply ID is required"]
-                    },
-                    "result": {}
-                }
-            }
-        }
-    )
-    def post(self, request):
-        """Like a reply by providing reply_id in the request body"""
-        user = request.user
-        reply_id = request.data.get("reply_id")
-
-        if not reply_id:
-            return Response({
-                "statusCode": 400,
-                "message": ["Reply ID is required"],
-                "result": []
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        reply = get_object_or_404(CommentReply, id=reply_id)
-
-        if CommentReplyLike.objects.filter(user=user, reply=reply).exists():
-            return Response({
-                "statusCode": 400,
-                "message": ["Already liked"],
-                "result": []
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Create Like Entry
-        CommentReplyLike.objects.create(user=user, reply=reply)
-        reply.like_count += 1
-        reply.save()
-
-        # Serialize and return updated reply
-        serializer = CommentReplySerializer(reply, context={"request": request})
-        return Response({
-            "statusCode": 200,
-            "message": ["Like added successfully"],
-            "result": serializer.data
-        }, status=status.HTTP_200_OK)
-
-class ReplyUnlikeView(GenericAPIView):
-    """View to handle unliking a reply."""
-
-    @extend_schema(
-        summary="Unlike a reply",
-        description="Unlike a specific reply by providing the `reply_id` in the query parameters.",
+        summary="Get mentionable users",
+        description="Returns a flat list of users (not grouped by letter). Optional search query can filter the results.",
         parameters=[
             OpenApiParameter(
-                name="reply_id",
-                description="ID of the reply to unlike",
-                required=True,
-                type=OpenApiTypes.INT
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Optional search term to filter users by username."
             )
         ],
         responses={
@@ -2154,59 +2271,38 @@ class ReplyUnlikeView(GenericAPIView):
                     "message": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "example": ["Like removed successfully"]
+                        "example": ["Mentionable users fetched successfully"]
                     },
-                    "result": {"type": "object"}  # Placeholder for serialized reply data
-                }
-            },
-            400: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 400},
-                    "message": {
+                    "result": {
                         "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Not liked yet", "Reply ID is required"]
-                    },
-                    "result": {}
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "integer", "example": 12},
+                                "display_username": {"type": "string", "example": "12 user"},
+                                "profile_image_path": {"type": "string", "example": None}
+                            }
+                        }
+                    }
                 }
             }
         }
     )
-    def delete(self, request):
-        """Unlike a reply by providing `reply_id` in the query parameters"""
-        user = request.user
-        reply_id = request.query_params.get("reply_id")  # ✅ Read from query parameters
+    def get(self, request):
+        search = request.query_params.get('search', None)
+        users = User.objects.exclude(username__isnull=True).exclude(username__exact="")
 
-        if not reply_id:
-            return Response({
-                "statusCode": 400,
-                "message": ["Reply ID is required"],
-                "result": []
-            }, status=status.HTTP_400_BAD_REQUEST)
+        if search and search.strip():
+            users = users.filter(username__icontains=search.strip())
 
-        reply = get_object_or_404(CommentReply, id=reply_id)
+        serialized_users = MentionUserSerializer(users, many=True).data
 
-        like = CommentReplyLike.objects.filter(user=user, reply=reply).first()
-        if not like:
-            return Response({
-                "statusCode": 400,
-                "message": ["Not liked yet"],
-                "result": []
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Remove Like
-        like.delete()
-        reply.like_count -= 1
-        reply.save()
-
-        # Serialize and return updated reply
-        serializer = CommentReplySerializer(reply, context={"request": request})
         return Response({
             "statusCode": 200,
-            "message": ["Like removed successfully"],
-            "result": serializer.data
+            "message": ["Mentionable users fetched successfully"],
+            "result": serialized_users
         }, status=status.HTTP_200_OK)
+
 
 class NotificationView(APIView):
     authentication_classes = [JWTAuthentication]

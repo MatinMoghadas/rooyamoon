@@ -1,6 +1,9 @@
 from django.contrib import admin
 from Ala_BackEnd.models import  (User, Card, Comment, Notification,
-                                 CommentReply, SavedCard, CommentLike, CommentReplyLike)
+                                 #CommentReply,
+                                 SavedCard, CommentLike
+                                 #, CommentReplyLike
+                                )
 # # from django.contrib.auth.admin import UserAdmin
 # from .models import User  # Import your custom User model
 # # Register your models here.
@@ -29,8 +32,8 @@ admin.site.register(User)
 admin.site.register(Card)
 admin.site.register(Comment)
 admin.site.register(Notification)
-admin.site.register(CommentReply)
+# admin.site.register(CommentReply)
 admin.site.register(SavedCard)
 admin.site.register(CommentLike)
-admin.site.register(CommentReplyLike)
+# admin.site.register(CommentReplyLike)
 # admin.site.register(FCMToken)

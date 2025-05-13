@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
+
 class User(AbstractUser):
     id = models.AutoField(primary_key=True)
     mobile_phone_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
@@ -25,6 +26,7 @@ class User(AbstractUser):
     def __str__(self):
         return self.username if self.username else self.mobile_phone_number
 
+
 class Card(models.Model):
     id = models.AutoField(primary_key=True)
     content = models.TextField(unique=True)
@@ -35,6 +37,7 @@ class Card(models.Model):
 
     def __str__(self):
         return self.content[:50]
+
 
 class SavedCard(models.Model):
     id = models.AutoField(primary_key=True)
@@ -48,11 +51,13 @@ class SavedCard(models.Model):
     def __str__(self):
         return f"{self.user.username} saved {self.card.content[:30]}"
 
+
 class Comment(models.Model):
     id = models.AutoField(primary_key=True)
     content = models.TextField()
     card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='comments')
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+    mentions = models.ManyToManyField(User, related_name="mentioned_in", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, null=True)
     like_count = models.IntegerField(default=0)
@@ -60,23 +65,6 @@ class Comment(models.Model):
     def __str__(self):
         return self.content[:50]
 
-class CommentReply(models.Model):
-    id = models.AutoField(primary_key=True)
-    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name='replies')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comment_replies')
-    content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    like_count = models.IntegerField(default=0)
-    parent_reply = models.ForeignKey(
-        'self',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='child_replies'
-    )
-
-    def __str__(self):
-        return self.content[:50]
 
 class CommentLike(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -88,15 +76,6 @@ class CommentLike(models.Model):
     def __str__(self):
         return f"{self.user.username} likes {self.comment.id}"
 
-class CommentReplyLike(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    reply = models.ForeignKey('CommentReply', on_delete=models.CASCADE)
-
-    class Meta:
-        unique_together = ('user', 'reply')
-
-    def __str__(self):
-        return f"{self.user.username} likes reply {self.reply.id}"
 
 class Notification(models.Model):
     id = models.AutoField(primary_key=True)
@@ -109,6 +88,33 @@ class Notification(models.Model):
     def __str__(self):
         return self.title if self.title else "Notification"
 
+
+# class CommentReply(models.Model):
+#     id = models.AutoField(primary_key=True)
+#     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name='replies')
+#     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comment_replies')
+#     content = models.TextField()
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     like_count = models.IntegerField(default=0)
+#     parent_reply = models.ForeignKey(
+#         'self',
+#         on_delete=models.CASCADE,
+#         null=True,
+#         blank=True,
+#         related_name='child_replies'
+#     )
+#
+#     def __str__(self):
+#         return self.content[:50]
+# class CommentReplyLike(models.Model):
+#     user = models.ForeignKey(User, on_delete=models.CASCADE)
+#     reply = models.ForeignKey('CommentReply', on_delete=models.CASCADE)
+#
+#     class Meta:
+#         unique_together = ('user', 'reply')
+#
+#     def __str__(self):
+#         return f"{self.user.username} likes reply {self.reply.id}"
 
 # class Event(models.Model):
 #     id = models.AutoField(primary_key=True)

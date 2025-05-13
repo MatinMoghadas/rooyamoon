@@ -1,7 +1,10 @@
 from rest_framework import serializers
 from .models import (User, Card, Notification, Comment,
-                     CommentReply, SavedCard, CommentLike,
-                     CommentReplyLike)
+                     #CommentReply,
+                     SavedCard, CommentLike,
+                     #CommentReplyLike
+                     )
+from .utils import get_display_username, extract_mentions
 
 
 class LoginSerializer(serializers.Serializer):
@@ -11,6 +14,7 @@ class LoginSerializer(serializers.Serializer):
         if not value.isdigit():
             raise serializers.ValidationError("Mobile phone number must be numeric.")
         return value
+
 
 class OTPLoginSerializer(serializers.Serializer):
     mobile_phone_number = serializers.CharField(max_length=12)
@@ -34,11 +38,34 @@ class OTPLoginSerializer(serializers.Serializer):
     #     cache.delete(cache_key)
     #     return value
 
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'mobile_phone_number', 'username', 'Full_name', 'bio', 'profile_image_path',
-                  'is_block', 'which_social_media', 'chat_id', 'is_admin', 'premium_level', 'subscription_end']
+        fields = '__all__'  # or list specific fields if needed
+
+    # def save(self, **kwargs):
+    #     instance = super().save(**kwargs)
+    #
+    #     # Automatically assign username if missing
+    #     if not instance.username:
+    #         instance.username = f"{instance.id}user"
+    #         instance.save(update_fields=['username'])
+    #
+    #     return instance
+
+    def create(self, validated_data):
+        if not validated_data.get('username'):
+            # Create user first so ID is available
+            user = User.objects.create(**validated_data)
+            user.username = f"{user.id}user"
+            user.save()
+            return user
+        return User.objects.create(**validated_data)
+
+    def get_display_username(self, obj):
+        return get_display_username(obj)
+
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     mobile_phone_number = serializers.CharField()
@@ -58,7 +85,18 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        username = validated_data.get('username')
+        if not username:
+            # Temporarily remove it to allow creation without it (since it's unique)
+            validated_data.pop('username', None)
+
         user = User.objects.create(**validated_data)
+
+        # Now that user.id exists, set the username if it was not provided
+        if not username:
+            user.username = f"user{user.id}_{user.mobile_phone_number}"
+            user.save(update_fields=['username'])
+
         return user
 
     def update(self, instance, validated_data):
@@ -67,151 +105,155 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
 class CommentSerializer(serializers.ModelSerializer):
     creator = serializers.SerializerMethodField()
-    # parent = serializers.PrimaryKeyRelatedField(queryset=Comment.objects.all(), required=False, allow_null=True)
+    mentions = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), many=True, required=False
+    )
 
     class Meta:
         model = Comment
-        fields = ['id', 'content', 'card', 'creator', 'created_at', 'updated_at', 'like_count']
-        read_only_fields = ['like_count']
-        # read_only_fields = ['parent']  # Make parent read-only during updates
-
-    def get_creator(self, obj):
-        """
-        Return the username if it exists, otherwise return the phone number.
-        """
-        if obj.creator and obj.creator.username:
-            return obj.creator.username
-        elif obj.creator and obj.creator.id:
-            return obj.creator.id
-        else:
-            return "No Username or Phone"  # Or some default value/message
-
-    def create(self, validated_data):
-        card = validated_data.get('card')
-        # parent = validated_data.pop('parent', None)  # Get parent from validated data, remove it, default to None
-        #
-        # if parent is None:
-        #     # Find the most recent comment for this card
-        #     last_comment = Comment.objects.filter(card=card).order_by('-created_at').first()
-        #     if last_comment:
-        #         parent = last_comment
-
-        validated_data['creator'] = self.context['request'].user
-        comment = Comment.objects.create(**validated_data)#, parent=parent)  # Create the comment with the determined parent
-        return comment
-
-    def get_is_liked(self, obj):
-        """Check if the authenticated user has liked this comment"""
-        user = self.context.get('request').user
-        if user.is_authenticated:
-            return CommentLike.objects.filter(user=user, comment=obj).exists()
-        return False
-
-class CommentReplySerializer(serializers.ModelSerializer):
-    user = serializers.SerializerMethodField()
-    created_at = serializers.ReadOnlyField()
-    parent_reply = serializers.PrimaryKeyRelatedField(
-        queryset=CommentReply.objects.all(), required=False, allow_null=True
-    )
-    is_liked = serializers.SerializerMethodField()  # Don't forget to add this to fields if you're using it.
-
-    class Meta:
-        model = CommentReply
         fields = [
-            'id',
-            'comment',
-            'user',
-            'content',
-            'created_at',
-            'like_count',
-            'parent_reply',
-            'is_liked'
+            'id', 'content', 'card', 'creator', 'mentions',
+            'created_at', 'updated_at', 'like_count'
         ]
-        read_only_fields = ['like_count', 'created_at']
-
-    def get_user(self, obj):
-        """
-        Return the username if available, otherwise return the user id.
-        """
-        if obj.user and obj.user.username:
-            return obj.user.username
-        return obj.user.id
-
-    def get_is_liked(self, obj):
-        """
-        Check if the authenticated user has liked this reply.
-        """
-        user = self.context.get('request').user
-        if user.is_authenticated:
-            return CommentReplyLike.objects.filter(user=user, reply=obj).exists()
-        return False
-
-
-class CommentWithRepliesCreatorSerializer(serializers.ModelSerializer):
-    creator = serializers.SerializerMethodField()
-    created_at = serializers.ReadOnlyField()
-    updated_at = serializers.ReadOnlyField()
-    replies = serializers.SerializerMethodField()
-
-    class InlineReplySerializer(serializers.ModelSerializer):
-        creator = serializers.SerializerMethodField()
-        created_at = serializers.ReadOnlyField()
-        parent_reply = serializers.PrimaryKeyRelatedField(read_only=True)
-        child_replies = serializers.SerializerMethodField()
-
-        class Meta:
-            model = CommentReply
-            fields = [
-                'id',
-                'comment',
-                'creator',
-                'content',
-                'created_at',
-                'like_count',
-                'parent_reply',
-                'child_replies'
-            ]
-
-        def get_creator(self, obj):
-            return obj.user.username if obj.user and obj.user.username else obj.user.id
-
-        def get_child_replies(self, obj):
-            children = obj.child_replies.all()
-            serializer = self.__class__(children, many=True, context=self.context)
-            return serializer.data
+        read_only_fields = ['creator', 'like_count']
 
     def get_creator(self, obj):
-        # FIXED: Changed from obj.user to obj.creator
         return obj.creator.username if obj.creator and obj.creator.username else obj.creator.id
 
-    def get_replies(self, obj):
-        top_level_replies = obj.replies.filter(parent_reply__isnull=True)
-        serializer = self.InlineReplySerializer(top_level_replies, many=True, context=self.context)
-        return serializer.data
+    def create(self, validated_data):
+        user = self.context['request'].user
+        mentions = validated_data.pop('mentions', [])
+        content = validated_data.get('content', '')
 
-    class Meta:
-        model = Comment
-        fields = [
-            'id',
-            'content',
-            'card',
-            'creator',
-            'created_at',
-            'updated_at',
-            'like_count',
-            'replies'
-        ]
+        comment = Comment.objects.create(creator=user, **validated_data)
+
+        # Merge explicitly passed mentions with extracted ones
+        extracted_users = extract_mentions(content)
+        all_mentions = list(set(mentions) | set(extracted_users))
+        if all_mentions:
+            comment.mentions.set(all_mentions)
+
+        return comment
+
+    def update(self, instance, validated_data):
+        mentions = validated_data.pop('mentions', [])
+        instance.content = validated_data.get('content', instance.content)
+        instance.save()
+
+        extracted_users = extract_mentions(instance.content)
+        all_mentions = list(set(mentions) | set(extracted_users))
+        instance.mentions.set(all_mentions)
+
+        return instance
 
 
-class CommentWithRepliesSerializer(CommentSerializer):
-    # The "replies" field will use the related name defined on CommentReply (e.g., related_name='replies')
-    replies = CommentReplySerializer(many=True, read_only=True)
+# class CommentReplySerializer(serializers.ModelSerializer):
+#     user = serializers.SerializerMethodField()
+#     created_at = serializers.ReadOnlyField()
+#     parent_reply = serializers.PrimaryKeyRelatedField(
+#         queryset=CommentReply.objects.all(), required=False, allow_null=True
+#     )
+#     is_liked = serializers.SerializerMethodField()  # Don't forget to add this to fields if you're using it.
+#
+#     class Meta:
+#         model = CommentReply
+#         fields = [
+#             'id',
+#             'comment',
+#             'user',
+#             'content',
+#             'created_at',
+#             'like_count',
+#             'parent_reply',
+#             'is_liked'
+#         ]
+#         read_only_fields = ['like_count', 'created_at']
+#
+#     def get_user(self, obj):
+#         """
+#         Return the username if available, otherwise return the user id.
+#         """
+#         if obj.user and obj.user.username:
+#             return obj.user.username
+#         return obj.user.id
+#
+#     def get_is_liked(self, obj):
+#         """
+#         Check if the authenticated user has liked this reply.
+#         """
+#         user = self.context.get('request').user
+#         if user.is_authenticated:
+#             return CommentReplyLike.objects.filter(user=user, reply=obj).exists()
+#         return False
 
-    class Meta(CommentSerializer.Meta):
-        # Include all fields from CommentSerializer plus replies
-        fields = CommentSerializer.Meta.fields + ['replies']
+
+# class CommentWithRepliesCreatorSerializer(serializers.ModelSerializer):
+#     creator = serializers.SerializerMethodField()
+#     created_at = serializers.ReadOnlyField()
+#     updated_at = serializers.ReadOnlyField()
+#     replies = serializers.SerializerMethodField()
+#
+#     class InlineReplySerializer(serializers.ModelSerializer):
+#         creator = serializers.SerializerMethodField()
+#         created_at = serializers.ReadOnlyField()
+#         parent_reply = serializers.PrimaryKeyRelatedField(read_only=True)
+#         child_replies = serializers.SerializerMethodField()
+#
+#         class Meta:
+#             model = CommentReply
+#             fields = [
+#                 'id',
+#                 'comment',
+#                 'creator',
+#                 'content',
+#                 'created_at',
+#                 'like_count',
+#                 'parent_reply',
+#                 'child_replies'
+#             ]
+#
+#         def get_creator(self, obj):
+#             return obj.user.username if obj.user and obj.user.username else obj.user.id
+#
+#         def get_child_replies(self, obj):
+#             children = obj.child_replies.all()
+#             serializer = self.__class__(children, many=True, context=self.context)
+#             return serializer.data
+#
+#     def get_creator(self, obj):
+#         # FIXED: Changed from obj.user to obj.creator
+#         return obj.creator.username if obj.creator and obj.creator.username else obj.creator.id
+#
+#     def get_replies(self, obj):
+#         top_level_replies = obj.replies.filter(parent_reply__isnull=True)
+#         serializer = self.InlineReplySerializer(top_level_replies, many=True, context=self.context)
+#         return serializer.data
+#
+#     class Meta:
+#         model = Comment
+#         fields = [
+#             'id',
+#             'content',
+#             'card',
+#             'creator',
+#             'created_at',
+#             'updated_at',
+#             'like_count',
+#             'replies'
+#         ]
+
+
+# class CommentWithRepliesSerializer(CommentSerializer):
+#     # The "replies" field will use the related name defined on CommentReply (e.g., related_name='replies')
+#     replies = CommentReplySerializer(many=True, read_only=True)
+#
+#     class Meta(CommentSerializer.Meta):
+#         # Include all fields from CommentSerializer plus replies
+#         fields = CommentSerializer.Meta.fields + ['replies']
+
 
 class SavedCardSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
@@ -224,6 +266,7 @@ class SavedCardSerializer(serializers.ModelSerializer):
         model = SavedCard
         fields = ['id', 'user', 'card', 'card_id', 'saved_at']
         read_only_fields = ['id', 'user', 'card', 'saved_at']
+
 
 class CardSerializer(serializers.ModelSerializer):
     creator = serializers.SerializerMethodField()
@@ -242,6 +285,18 @@ class CardSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return SavedCard.objects.filter(user=request.user, card=obj).exists()
         return False  # Default to False for unauthenticated users
+
+
+class MentionUserSerializer(serializers.ModelSerializer):
+    display_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'display_username', 'profile_image_path']
+
+    def get_display_username(self, obj):
+        return get_display_username(obj)
+
 
 class NotificationSerializer(serializers.ModelSerializer):
     owner = UserSerializer(read_only=True)
