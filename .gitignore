@@ -54,3 +54,4 @@ celerybeat-schedule
 # Docker-related files (if applicable)
 *.env
 docker-compose.override.yml
+/Ala_BackEnd/migrations/

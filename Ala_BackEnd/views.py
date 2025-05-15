@@ -1010,10 +1010,11 @@ class CardCommentsRepliesAPIView(APIView):
         }
     )
     def get(self, request, card_id, format=None):
-        # Retrieve the card or return a 404 response if not found
         card = get_object_or_404(Card, id=card_id)
-        # Retrieve all comments for this card
-        comments = Comment.objects.filter(card=card).order_by('-created_at')
+
+        # Only fetch top-level comments
+        comments = Comment.objects.filter(card=card, parent__isnull=True).order_by('-created_at')
+
         serializer = CommentWithRepliesCreatorSerializer(comments, many=True, context={'request': request})
 
         return Response({
