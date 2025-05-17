@@ -324,8 +324,10 @@ class GeminiRAG:
         raise RuntimeError("❌ Failed to generate valid challenges after 3 retries.")
 
     async def ask_question(self, query: str, challange: str = "", top_k: int = 5) -> str:
-        query_emb = self.embedder.encode([query], convert_to_numpy=True)
-        D, I = self.index.search(np.array(query_emb), top_k)
+        query_emb = await asyncio.to_thread(self.embedder.encode, [query], convert_to_numpy=True)
+        # query_emb = self.embedder.encode([query], convert_to_numpy=True)
+        D, I = await asyncio.to_thread(self.index.search, np.array(query_emb), top_k)
+        # D, I = self.index.search(np.array(query_emb), top_k)
         context = "\n".join([self.documents[i] for i in I[0] if i < len(self.documents)])
 
         prompt = f"""
@@ -374,7 +376,9 @@ async def chat_loop(rag: GeminiRAG):
 
     while True:
         try:
-            user_input = input('\nکاربر: ').strip()
+            # user_input = input('\nکاربر: ').strip()
+            user_input = await asyncio.to_thread(input, '\nکاربر: ')
+            user_input = user_input.strip()
             if user_input.lower() in [e.lower() for e in exit_keywords]:
                 print('رویامون: به امید ساختن رویامون 🌟')
                 break
