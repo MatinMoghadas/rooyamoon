@@ -15,8 +15,6 @@ numpy>=1.24
 #pyOpenSSL>=25.0
 python-dotenv>=1.0
 redis>=4.0  # 6.0 is very high; check compat
-torch==2.7.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
-
 sentence-transformers>=2.2
 #Sphinx>=8.0
 # thread>=2.0.0  # not a standard package; double-check this
