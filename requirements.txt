@@ -1,23 +1,23 @@
-attrs>=0.3.2
-configparser>=5.0.0  # 7.2.0 is likely incorrect; PyPI latest is ~5.x
-cryptography>=44.0.0
-docutils>=0.21
+#attrs>=0.3.2
+#configparser>=5.0.0  # 7.2.0 is likely incorrect; PyPI latest is ~5.x
+#cryptography>=44.0.0
+#docutils>=0.21
 faiss-cpu>=1.5.3
-filelock>=3.0.0
+#filelock>=3.0.0
 PyMuPDF>=1.23.0  # use proper name for fitz binding
-html-parser>=0.0.2
-ipython>=8.12
-ipywidgets>=8.1
-pyjnius>=1.1.0
-keyring>=25.6.0
+#html-parser>=0.0.2
+#ipython>=8.12
+#ipywidgets>=8.1
+#pyjnius>=1.1.0
+#keyring>=25.6.0
 numpy>=1.24
-protobuf>=6.3
-pyOpenSSL>=25.0
+#protobuf>=6.3
+#pyOpenSSL>=25.0
 python-dotenv>=1.0
 redis>=4.0  # 6.0 is very high; check compat
 sentence-transformers>=2.2
-Sphinx>=8.0
+#Sphinx>=8.0
 # thread>=2.0.0  # not a standard package; double-check this
 urllib3-secure-extra>=0.1.0
-xmlrpclib; python_version < "3.0"  # stdlib in Py2, removed in Py3
+#xmlrpclib; python_version < "3.0"  # stdlib in Py2, removed in Py3
 google-generativeai>=0.3.0  # based on typical versions
