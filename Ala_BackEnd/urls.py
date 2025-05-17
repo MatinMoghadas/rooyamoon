@@ -7,7 +7,8 @@ from .views import (
     CustomTokenRefreshView, SavedCardAPIView,
     SavedCardDeleteAPIView, CommentLikeView,
     CommentUnlikeView, UpdateCommentView,
-    MentionUserListAPIView, CardCommentsRepliesAPIView
+    MentionUserListAPIView, CardCommentsRepliesAPIView,
+    # GeminiChatAPIView
     # CommentReplyViewSet, CardCommentsRepliesAPIView, CommentReplyUpdateViewSet,
     # CommentReplyLikeView, ReplyUnlikeView,
 )
@@ -42,6 +43,7 @@ urlpatterns = [
     path("redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     path('api/cards/<int:card_id>/comments/', CardCommentsRepliesAPIView.as_view(),
          name='card-comments-replies'),
+    # path("api/chat/", GeminiChatAPIView.as_view(), name="gemini-chat"),
 
     # path('api/replies/like/', CommentReplyLikeView.as_view(), name='reply-like'),
     # path('api/replies/unlike/', ReplyUnlikeView.as_view(), name='reply-unlike'),

@@ -24,10 +24,12 @@ from .utils import generate_otp, verify_otp, get_or_create_user, generate_tokens
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import logging
-
+# from .gemini_rag import GeminiRAG
 User = get_user_model()
 logger = logging.getLogger(__name__)
-
+# api_key = getattr(settings, "MY_API_KEY", None)
+# rag = GeminiRAG(api_key=api_key)
+# rag.load_vectorstore()
 
 class OTPLoginView(APIView):
     permission_classes = []  # Allow unauthenticated users
@@ -2384,6 +2386,43 @@ class MentionUserListAPIView(APIView):
             "message": ["Mentionable users fetched successfully"],
             "result": serialized_users
         }, status=status.HTTP_200_OK)
+
+
+# class GeminiChatAPIView(APIView):
+#     """
+#     POST /api/chat/
+#     Input: {"message": "می‌خوام مهندس بشم"}
+#     Output: challenges + AI response
+#     """
+#     def post(self, request, *args, **kwargs):
+#         user_message = request.data.get("message")
+#         if not user_message:
+#             return Response({
+#                 "statusCode": 400,
+#                 "message": "message is required."
+#             }, status=status.HTTP_400_BAD_REQUEST)
+# 
+#         try:
+#             # Run async Gemini logic inside Django
+#             result = asyncio.run(self.handle_rag_chat(user_message))
+#             return Response({
+#                 "statusCode": 200,
+#                 "message": "موفق",
+#                 "challenges": result["challenges"],
+#                 "response": result["response"]
+#             })
+# 
+#         except Exception as e:
+#             return Response({
+#                 "statusCode": 500,
+#                 "message": f"خطا: {str(e)}"
+#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# 
+#     async def handle_rag_chat(self, user_input):
+#         challenges = await rag.generate_challenges(user_input)
+#         chosen_challenge = challenges[0]
+#         response = await rag.ask_question(user_input, challange=chosen_challenge)
+#         return {"challenges": challenges, "response": response}
 
 
 class NotificationView(APIView):
