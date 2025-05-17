@@ -1,0 +1,57 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+
+# Django migrations
+*/migrations/*.pyc
+*/migrations/__pycache__/
+
+# Local environment settings
+local_settings.py
+.env
+
+# Database files
+db.sqlite3
+
+# Static and media files
+/staticfiles/
+/media/
+
+# IDEs and editors
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and debug files
+*.log
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# pyenv
+.python-version
+
+# mypy type checker
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pytest cache
+.pytest_cache/
+
+# Celery beat schedule file
+celerybeat-schedule
+
+# Docker-related files (if applicable)
+*.env
+docker-compose.override.yml
+/Ala_BackEnd/migrations/

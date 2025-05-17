@@ -1,0 +1,2595 @@
+openapi: 3.0.3
+info:
+  title: ''
+  version: 0.0.0
+paths:
+  /api/cards/:
+    get:
+      operationId: api_cards_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - count
+                - results
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=4
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=2
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        statusCode:
+                          type: integer
+                          example: 200
+                        messages:
+                          type: array
+                          items:
+                            type: string
+                          example:
+                          - Cards retrieved successfully.
+                        total:
+                          type: integer
+                          example: 100
+                        page:
+                          type: integer
+                          example: 1
+                        perPage:
+                          type: integer
+                          example: 10
+                        result:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                                example: 1
+                              content:
+                                type: string
+                                example: This is a sample card
+                              creator:
+                                type: string
+                                example: Creator Username
+                              created_at:
+                                type: string
+                                example: '2023-03-05T12:34:56Z'
+                              is_saved:
+                                type: boolean
+                                example: true
+          description: ''
+    post:
+      operationId: api_cards_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Card'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Card'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Card'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card created successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is a sample card
+                      creator:
+                        type: string
+                        example: Creator Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Failed to create card.
+                  errors:
+                    type: object
+          description: ''
+  /api/cards/{card_id}/comments-replies/:
+    get:
+      operationId: api_cards_comments_replies_retrieve
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comments and replies retrieved successfully.
+                  total:
+                    type: integer
+                    example: 5
+                  result:
+                    type: object
+                    properties:
+                      card_id:
+                        type: integer
+                        example: 1
+                      comments:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                              example: 1
+                            content:
+                              type: string
+                              example: This is a comment
+                            card:
+                              type: integer
+                              example: 1
+                            creator:
+                              type: string
+                              example: User1
+                            created_at:
+                              type: string
+                              example: '2023-03-05T12:34:56Z'
+                            updated_at:
+                              type: string
+                              example: '2023-03-05T12:34:56Z'
+                            replies:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id:
+                                    type: integer
+                                    example: 1
+                                  comment:
+                                    type: integer
+                                    example: 1
+                                  user:
+                                    type: string
+                                    example: User2
+                                  content:
+                                    type: string
+                                    example: This is a reply
+                                  created_at:
+                                    type: string
+                                    example: '2023-03-05T13:00:00Z'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card not found.
+          description: ''
+  /api/cards/{id}/:
+    get:
+      operationId: api_cards_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this card.
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card retrieved successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is a sample card
+                      creator:
+                        type: string
+                        example: Creator Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+                      is_saved:
+                        type: boolean
+                        example: true
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card not found.
+          description: ''
+    put:
+      operationId: api_cards_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this card.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Card'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Card'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Card'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card updated successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is an updated card
+                      creator:
+                        type: string
+                        example: Creator Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Failed to update card.
+                  errors:
+                    type: object
+          description: ''
+    patch:
+      operationId: api_cards_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this card.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCard'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCard'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCard'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card partially updated successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is an updated card
+                      creator:
+                        type: string
+                        example: Creator Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Failed to partially update card.
+                  errors:
+                    type: object
+          description: ''
+    delete:
+      operationId: api_cards_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this card.
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 204
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card deleted successfully.
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card not found.
+          description: ''
+  /api/comment-replies/:
+    get:
+      operationId: api_comment_replies_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - count
+                - results
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=4
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=2
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        statusCode:
+                          type: integer
+                          example: 200
+                        messages:
+                          type: array
+                          items:
+                            type: string
+                          example:
+                          - Comment replies retrieved successfully.
+                        total:
+                          type: integer
+                          example: 50
+                        page:
+                          type: integer
+                          example: 1
+                        perPage:
+                          type: integer
+                          example: 10
+                        result:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                                example: 1
+                              content:
+                                type: string
+                                example: This is a reply
+                              user:
+                                type: string
+                                example: Username
+                              created_at:
+                                type: string
+                                example: '2023-03-05T12:34:56Z'
+          description: ''
+    post:
+      operationId: api_comment_replies_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentReply'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CommentReply'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CommentReply'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment reply created successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is a newly created reply
+                      user:
+                        type: string
+                        example: Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Failed to create comment reply.
+                  errors:
+                    type: object
+          description: ''
+  /api/comment-replies/{id}/:
+    get:
+      operationId: api_comment_replies_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment reply.
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment reply retrieved successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is a reply
+                      user:
+                        type: string
+                        example: Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment reply not found.
+          description: ''
+    put:
+      operationId: api_comment_replies_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment reply.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentReply'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CommentReply'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CommentReply'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentReply'
+          description: ''
+    patch:
+      operationId: api_comment_replies_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment reply.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCommentReply'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCommentReply'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCommentReply'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment reply partially updated successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is an updated reply
+                      user:
+                        type: string
+                        example: Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Failed to partially update comment reply.
+                  errors:
+                    type: object
+          description: ''
+    delete:
+      operationId: api_comment_replies_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment reply.
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 204
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment reply deleted successfully.
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment reply not found.
+          description: ''
+  /api/comment-replies/by-comment/{comment_id}/:
+    get:
+      operationId: api_comment_replies_by_comment_retrieve
+      description: Get all replies for a specific comment ID
+      parameters:
+      - in: path
+        name: comment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Replies retrieved successfully.
+                  total:
+                    type: integer
+                    example: 10
+                  result:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 1
+                        content:
+                          type: string
+                          example: This is a reply
+                        user:
+                          type: string
+                          example: Username
+                        created_at:
+                          type: string
+                          example: '2023-03-05T12:34:56Z'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment not found.
+          description: ''
+  /api/comments/:
+    get:
+      operationId: api_comments_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - count
+                - results
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=4
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?page=2
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        statusCode:
+                          type: integer
+                          example: 200
+                        messages:
+                          type: array
+                          items:
+                            type: string
+                          example:
+                          - Comments retrieved successfully.
+                        total:
+                          type: integer
+                          example: 0
+                        page:
+                          type: integer
+                          example: 1
+                        perPage:
+                          type: integer
+                          example: 10
+                        result:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                                example: 1
+                              content:
+                                type: string
+                                example: This is a sample comment
+                              creator:
+                                type: string
+                                example: Creator Username
+                              created_at:
+                                type: string
+                                example: '2023-03-05T12:34:56Z'
+          description: ''
+    post:
+      operationId: api_comments_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  example: This is a new comment
+                card:
+                  type: integer
+                  example: 1
+              required:
+              - content
+              - card_id
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment created successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is a new comment
+                      creator:
+                        type: string
+                        example: Creator Username
+                      card_id:
+                        type: integer
+                        example: 1
+                      created_at:
+                        type: string
+                        example: '2025-03-16T12:34:56Z'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Failed to create comment.
+                  errors:
+                    type: object
+          description: ''
+  /api/comments/{id}/:
+    get:
+      operationId: api_comments_retrieve
+      description: Retrieve a specific comment by its ID.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment retrieved successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: This is a sample comment
+                      creator:
+                        type: string
+                        example: Creator Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment not found.
+          description: ''
+    put:
+      operationId: api_comments_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Comment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Comment'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+          description: ''
+    patch:
+      operationId: api_comments_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedComment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedComment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedComment'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+          description: ''
+    delete:
+      operationId: api_comments_destroy
+      description: Delete a comment. Only the comment creator or an admin can delete
+        it.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 204
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment deleted successfully.
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 403
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - You do not have permission to delete this comment.
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment not found.
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - An error occurred while deleting the comment.
+                  error:
+                    type: string
+                    example: Detailed error message here
+          description: ''
+  /api/comments/like/:
+    post:
+      operationId: api_comments_like_create
+      description: Like a specific comment by providing the `comment_id` in the request
+        body.
+      summary: Like a comment
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment_id:
+                  type: integer
+                  example: 1
+              required:
+              - comment_id
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  message:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Like added successfully
+                  result:
+                    type: object
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  message:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Already liked
+                    - Comment ID is required
+                  result: {}
+          description: ''
+  /api/comments/unlike/:
+    delete:
+      operationId: api_comments_unlike_destroy
+      description: Unlike a specific comment by providing the comment_id in the query
+        parameters.
+      summary: Unlike a comment
+      parameters:
+      - in: query
+        name: comment_id
+        schema:
+          type: integer
+        description: ID of the comment to unlike
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  message:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Like removed successfully
+                  result:
+                    type: object
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  message:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Not liked yet
+                    - Comment ID is required
+                  result: {}
+          description: ''
+  /api/comments/update/:
+    put:
+      operationId: api_comments_update_update
+      description: Update a comment by providing `comment_id` in the request body.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment_id:
+                  type: integer
+                  example: 1
+                content:
+                  type: string
+                  example: Updated comment content
+              required:
+              - comment_id
+              - content
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment updated successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      content:
+                        type: string
+                        example: Updated comment content
+                      creator:
+                        type: string
+                        example: Creator Username
+                      created_at:
+                        type: string
+                        example: '2023-03-05T12:34:56Z'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Failed to update comment.
+                  errors:
+                    type: object
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Comment not found.
+          description: ''
+  /api/replies/like/:
+    post:
+      operationId: api_replies_like_create
+      description: Like a specific reply by providing the `reply_id` in the request
+        body.
+      summary: Like a reply
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reply_id:
+                  type: integer
+                  example: 1
+              required:
+              - reply_id
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  message:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Like added successfully
+                  result:
+                    type: object
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  message:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Already liked
+                    - Reply ID is required
+                  result: {}
+          description: ''
+  /api/replies/unlike/:
+    delete:
+      operationId: api_replies_unlike_destroy
+      description: Unlike a specific reply by providing the `reply_id` in the query
+        parameters.
+      summary: Unlike a reply
+      parameters:
+      - in: query
+        name: reply_id
+        schema:
+          type: integer
+        description: ID of the reply to unlike
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  message:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Like removed successfully
+                  result:
+                    type: object
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  message:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Not liked yet
+                    - Reply ID is required
+                  result: {}
+          description: ''
+  /api/saved-cards/:
+    get:
+      operationId: api_saved_cards_retrieve
+      description: Retrieve all saved cards for the authenticated user.
+      summary: Retrieve all saved cards
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Saved cards retrieved successfully.
+                  total:
+                    type: integer
+                    example: 5
+                  result:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 1
+                        user:
+                          type: string
+                          example: username
+                        card:
+                          type: string
+                          example: Card Title
+                        card_id:
+                          type: integer
+                          example: 1
+                        saved_at:
+                          type: string
+                          example: '2024-03-10T14:30:00Z'
+          description: ''
+    post:
+      operationId: api_saved_cards_create
+      description: Save a new card for the authenticated user by providing `card_id`.
+      summary: Save a new card
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavedCard'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SavedCard'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SavedCard'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card saved successfully.
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      user:
+                        type: string
+                        example: username
+                      card:
+                        type: string
+                        example: Card Title
+                      card_id:
+                        type: integer
+                        example: 1
+                      saved_at:
+                        type: string
+                        example: '2024-03-10T14:30:00Z'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card ID is required.
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 500
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Database error occurred while saving the card.
+          description: ''
+  /api/saved-cards/{card_id}/:
+    delete:
+      operationId: api_saved_cards_destroy
+      description: Delete a saved card based on `card_id` provided in the URL.
+      summary: Delete a saved card
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: integer
+        description: ID of the card to remove from saved list
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Card removed from saved list.
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 404
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Saved card not found.
+          description: ''
+  /api/token/refresh/:
+    get:
+      operationId: api_token_refresh_retrieve
+      description: '# Extract the token from query parameters (e.g., ?refresh=<token>)'
+      parameters:
+      - in: query
+        name: refresh
+        schema:
+          type: string
+        description: Refresh token to get a new access token.
+        required: true
+      tags:
+      - api
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Token refreshed successfully.
+                  result:
+                    type: object
+                    properties:
+                      accessToken:
+                        type: string
+                        example: new_access_token
+                      refreshToken:
+                        type: string
+                        example: provided_refresh_token
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Refresh token not provided.
+          description: ''
+    post:
+      operationId: api_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /auth/login/:
+    post:
+      operationId: auth_login_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Login'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Login'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - کد کلید با موفقیت ارسال شد.
+                  total:
+                    type: integer
+                    example: 0
+                  page:
+                    type: integer
+                    example: 1
+                  perPage:
+                    type: integer
+                    example: 10
+                  result:
+                    type: object
+                    properties:
+                      phoneNumber:
+                        type: string
+                        example: 09123456789
+                      username:
+                        type: string
+                        example: user_example
+                      Full_name:
+                        type: string
+                        example: Full Name
+                      dataGathering:
+                        type: boolean
+                        example: true
+                      test:
+                        type: string
+                        example: 'OTP: 123456'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Invalid input data.
+                  errors:
+                    type: object
+          description: ''
+  /auth/verify/:
+    post:
+      operationId: auth_verify_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPLogin'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OTPLogin'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OTPLogin'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status_code:
+                    type: integer
+                    example: 200
+                  messagess:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - OTP verified successfully.
+                  access_token:
+                    type: string
+                    example: generated_access_token
+                  refresh_token:
+                    type: string
+                    example: generated_refresh_token
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status_code:
+                    type: integer
+                    example: 400
+                  messagess:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Invalid OTP data.
+                  errors:
+                    type: object
+          description: ''
+  /notifications/:
+    get:
+      operationId: notifications_list
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+          description: ''
+  /schema/:
+    get:
+      operationId: schema_retrieve
+      description: |-
+        OpenApi3 schema for this API. Format can be selected via content negotiation.
+
+        - YAML: application/vnd.oai.openapi
+        - JSON: application/vnd.oai.openapi+json
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - json
+          - yaml
+      - in: query
+        name: lang
+        schema:
+          type: string
+          enum:
+          - af
+          - ar
+          - ar-dz
+          - ast
+          - az
+          - be
+          - bg
+          - bn
+          - br
+          - bs
+          - ca
+          - ckb
+          - cs
+          - cy
+          - da
+          - de
+          - dsb
+          - el
+          - en
+          - en-au
+          - en-gb
+          - eo
+          - es
+          - es-ar
+          - es-co
+          - es-mx
+          - es-ni
+          - es-ve
+          - et
+          - eu
+          - fa
+          - fi
+          - fr
+          - fy
+          - ga
+          - gd
+          - gl
+          - he
+          - hi
+          - hr
+          - hsb
+          - hu
+          - hy
+          - ia
+          - id
+          - ig
+          - io
+          - is
+          - it
+          - ja
+          - ka
+          - kab
+          - kk
+          - km
+          - kn
+          - ko
+          - ky
+          - lb
+          - lt
+          - lv
+          - mk
+          - ml
+          - mn
+          - mr
+          - ms
+          - my
+          - nb
+          - ne
+          - nl
+          - nn
+          - os
+          - pa
+          - pl
+          - pt
+          - pt-br
+          - ro
+          - ru
+          - sk
+          - sl
+          - sq
+          - sr
+          - sr-latn
+          - sv
+          - sw
+          - ta
+          - te
+          - tg
+          - th
+          - tk
+          - tr
+          - tt
+          - udm
+          - ug
+          - uk
+          - ur
+          - uz
+          - vi
+          - zh-hans
+          - zh-hant
+      tags:
+      - schema
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/vnd.oai.openapi:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/yaml:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/vnd.oai.openapi+json:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /user/profile/:
+    get:
+      operationId: user_profile_retrieve
+      tags:
+      - user
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - User profile fetched successfully.
+                  total:
+                    type: integer
+                    example: 0
+                  page:
+                    type: integer
+                    example: 1
+                  perPage:
+                    type: integer
+                    example: 10
+                  result:
+                    type: object
+          description: ''
+    put:
+      operationId: user_profile_update
+      tags:
+      - user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 200
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Profile updated successfully.
+                  total:
+                    type: integer
+                    example: 0
+                  page:
+                    type: integer
+                    example: 1
+                  perPage:
+                    type: integer
+                    example: 10
+                  result:
+                    type: object
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 400
+                  messages:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                    - Failed to update profile.
+                  errors:
+                    type: object
+          description: ''
+components:
+  schemas:
+    Card:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content:
+          type: string
+        challenge:
+          type: string
+        creator:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        like_count:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        is_saved:
+          type: string
+          readOnly: true
+      required:
+      - challenge
+      - content
+      - created_at
+      - creator
+      - id
+      - is_saved
+    Comment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content:
+          type: string
+        card:
+          type: integer
+        creator:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        like_count:
+          type: integer
+          readOnly: true
+      required:
+      - card
+      - content
+      - created_at
+      - creator
+      - id
+      - like_count
+      - updated_at
+    CommentReply:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        comment:
+          type: integer
+        user:
+          type: string
+          readOnly: true
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        like_count:
+          type: integer
+          readOnly: true
+      required:
+      - comment
+      - content
+      - created_at
+      - id
+      - like_count
+      - user
+    Login:
+      type: object
+      properties:
+        mobile_phone_number:
+          type: string
+          maxLength: 12
+      required:
+      - mobile_phone_number
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        owner:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        title:
+          type: string
+          nullable: true
+          maxLength: 255
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        related_entity:
+          allOf:
+          - $ref: '#/components/schemas/Card'
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - message
+      - owner
+      - related_entity
+    OTPLogin:
+      type: object
+      properties:
+        mobile_phone_number:
+          type: string
+          maxLength: 12
+        otp:
+          type: string
+          writeOnly: true
+          maxLength: 5
+          minLength: 5
+      required:
+      - mobile_phone_number
+      - otp
+    PatchedCard:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content:
+          type: string
+        challenge:
+          type: string
+        creator:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        like_count:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        is_saved:
+          type: string
+          readOnly: true
+    PatchedComment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content:
+          type: string
+        card:
+          type: integer
+        creator:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        like_count:
+          type: integer
+          readOnly: true
+    PatchedCommentReply:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        comment:
+          type: integer
+        user:
+          type: string
+          readOnly: true
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        like_count:
+          type: integer
+          readOnly: true
+    SavedCard:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          type: string
+          readOnly: true
+        card:
+          type: string
+          readOnly: true
+        card_id:
+          type: integer
+          writeOnly: true
+        saved_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - card
+      - card_id
+      - id
+      - saved_at
+      - user
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        mobile_phone_number:
+          type: string
+          nullable: true
+          maxLength: 15
+        username:
+          type: string
+          nullable: true
+          maxLength: 255
+        Full_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        bio:
+          type: string
+          nullable: true
+        profile_image_path:
+          type: string
+          nullable: true
+          maxLength: 255
+        is_block:
+          type: boolean
+        which_social_media:
+          type: string
+          maxLength: 30
+        chat_id:
+          type: string
+          nullable: true
+          maxLength: 30
+        is_admin:
+          type: boolean
+        premium_level:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        subscription_end:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - id
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
