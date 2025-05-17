@@ -21,3 +21,8 @@ sentence-transformers>=2.2
 urllib3-secure-extra>=0.1.0
 #xmlrpclib; python_version < "3.0"  # stdlib in Py2, removed in Py3
 google-generativeai>=0.3.0  # based on typical versions
+
+asgiref==3.8.1
+Django==5.2
+sqlparse==0.5.3
+typing_extensions==4.13.2
