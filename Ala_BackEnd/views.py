@@ -1,8 +1,11 @@
+import asyncio
+
 from django.core.cache import cache
 from django.db import DatabaseError, IntegrityError
 from django.shortcuts import get_object_or_404
+# from django.utils import asyncio
 from drf_spectacular.types import OpenApiTypes
-from rest_framework.decorators import action
+from Gemini_RAG_v0_32 import GeminiRAG as rag
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView
 from rest_framework.views import APIView
@@ -30,6 +33,7 @@ logger = logging.getLogger(__name__)
 # api_key = getattr(settings, "MY_API_KEY", None)
 # rag = GeminiRAG(api_key=api_key)
 # rag.load_vectorstore()
+
 
 class OTPLoginView(APIView):
     permission_classes = []  # Allow unauthenticated users
@@ -2388,41 +2392,95 @@ class MentionUserListAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# class GeminiChatAPIView(APIView):
-#     """
-#     POST /api/chat/
-#     Input: {"message": "می‌خوام مهندس بشم"}
-#     Output: challenges + AI response
-#     """
-#     def post(self, request, *args, **kwargs):
-#         user_message = request.data.get("message")
-#         if not user_message:
-#             return Response({
-#                 "statusCode": 400,
-#                 "message": "message is required."
-#             }, status=status.HTTP_400_BAD_REQUEST)
-# 
-#         try:
-#             # Run async Gemini logic inside Django
-#             result = asyncio.run(self.handle_rag_chat(user_message))
-#             return Response({
-#                 "statusCode": 200,
-#                 "message": "موفق",
-#                 "challenges": result["challenges"],
-#                 "response": result["response"]
-#             })
-# 
-#         except Exception as e:
-#             return Response({
-#                 "statusCode": 500,
-#                 "message": f"خطا: {str(e)}"
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-# 
-#     async def handle_rag_chat(self, user_input):
-#         challenges = await rag.generate_challenges(user_input)
-#         chosen_challenge = challenges[0]
-#         response = await rag.ask_question(user_input, challange=chosen_challenge)
-#         return {"challenges": challenges, "response": response}
+def swagger_auto_schema(operation_description, request_body, responses):
+    pass
+
+
+class GeminiChatAPIView(APIView):
+    """
+    POST /api/chat/
+    Input: {"message": "می‌خوام مهندس بشم"}
+    Output: challenges + AI response
+    """
+
+    @extend_schema(
+        summary="Gemini AI Chat",
+        description="ارسال پیام به مدل Gemini و دریافت پاسخ به همراه چالش‌ها.",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "example": "می‌خوام مهندس بشم"
+                    }
+                },
+                "required": ["message"]
+            }
+        },
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 200},
+                    "message": {"type": "string", "example": "موفق"},
+                    "challenges": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["چالش ۱", "چالش ۲", "چالش ۳"]
+                    },
+                    "response": {
+                        "type": "string",
+                        "example": "برای مهندس شدن باید ریاضیات و فیزیک را خوب یاد بگیری."
+                    }
+                }
+            },
+            400: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 400},
+                    "message": {"type": "string", "example": "message is required."}
+                }
+            },
+            500: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 500},
+                    "message": {"type": "string", "example": "خطا: خطای پیش‌بینی نشده"}
+                }
+            }
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        user_message = request.data.get("message")
+        if not user_message:
+            return Response({
+                "statusCode": 400,
+                "message": "message is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = asyncio.run(self.handle_rag_chat(user_message))
+            return Response({
+                "statusCode": 200,
+                "message": "موفق",
+                "challenges": result["challenges"],
+                "response": result["response"]
+            })
+
+        except Exception as e:
+            return Response({
+                "statusCode": 500,
+                "message": f"خطا: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    async def handle_rag_chat(self, user_input):
+        # challenges = await rag.generate_challenges(user_input)
+        # chosen_challenge = challenges[0]
+        response = await rag.ask_question(query=user_input, challange="chosen_challenge")
+        # return {""challenges": challenges," "response": response}
+        return {"response": response}
+
 
 
 class NotificationView(APIView):

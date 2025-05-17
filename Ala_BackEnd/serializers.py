@@ -167,6 +167,8 @@ class CommentWithRepliesCreatorSerializer(serializers.ModelSerializer):
         ]
 
     def get_creator(self, obj):
+        if obj.creator and obj.creator.username:
+            return obj.creator.username
         return f"u{obj.creator.id}"
 
     def get_mentionedUserIds(self, obj):
