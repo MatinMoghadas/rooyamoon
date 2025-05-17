@@ -179,7 +179,6 @@ class GeminiRAG:
 
             خروجی مورد انتظار:
             ["چالش۱", "چالش۲", ..., "چالش{num}"]
-            
             """
 
         for attempt in range(3):
