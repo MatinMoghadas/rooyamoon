@@ -1,3 +1,4 @@
+
 import os
 import time
 import json
@@ -17,7 +18,7 @@ load_dotenv()
 api_key = os.getenv("MY_API_KEY")
 
 # Expand ~ to full path
-base_dir = os.path.expanduser("/home/raoof/PycharmProjects/GeminiRag")
+base_dir = os.path.expanduser("~/rooyamoon")
 os.makedirs(base_dir, exist_ok=True)
 filename = "faiss_index.index"
 full_path = os.path.join(base_dir, filename)
@@ -251,7 +252,7 @@ samples = """
 Instruction_prompt = Instruction_prompt + added_points + samples
 
 class GeminiRAG:
-    def _init_(self, api_key: str, model_name: str = "models/gemini-2.0-flash",
+    def __init__(self, api_key: str, model_name: str = "models/gemini-2.0-flash",
                  embed_model_name: str = "PartAI/Tooka-SBERT",
                  instruction_prompt: str = Instruction_prompt,
                  vectorstore_path: str = full_path):
@@ -302,7 +303,7 @@ class GeminiRAG:
             - دقیقاً {num} چالش تولید کن
 
             پیام کاربر: "{query}"
- 
+
             خروجی مورد انتظار:
             ["چالش۱", "چالش۲", ..., "چالش{num}"]
             """
@@ -337,6 +338,7 @@ class GeminiRAG:
         Question: {query}
         User is interested in this challenge: {challange}
         Answer:"""
+
         for attempt in range(3):
             try:
                 response = await asyncio.to_thread(self.model.generate_content, prompt)
@@ -380,13 +382,12 @@ async def chat_loop(rag: GeminiRAG):
             if user_input.lower() in [e.lower() for e in exit_keywords]:
                 print('رویامون: به امید ساختن رویامون 🌟')
                 break
-            # challenges = await rag.generate_challenges(user_input)
+            challenges = await rag.generate_challenges(user_input)
             # wait until user choose one button
-            # chosen_challenge = challenges[0]
-            chosen_challenge = ""
+            chosen_challenge = challenges[0]
             response = await rag.ask_question(user_input, challange=chosen_challenge)
-            print('رویامون:', response)
-            print('-' * 40)
+            # print('رویامون:', response)
+            # print('-' * 40)
             # print(f"📌 چالش‌ها: {challenges}")
             # print('-' * 40)
         except Exception as e:
@@ -407,5 +408,5 @@ def main():
 
     asyncio.run(chat_loop(rag))
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
