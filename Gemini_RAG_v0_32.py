@@ -328,7 +328,7 @@ class GeminiRAG:
         # query_emb = self.embedder.encode([query], convert_to_numpy=True)
         D, I = await asyncio.to_thread(self.index.search, np.array(query_emb), top_k)
         # D, I = self.index.search(np.array(query_emb), top_k)
-        context = "\n".join([self.documents[i] for i in I[0] if i < len(self.documents)])
+        context = "\n".join([self.documents[i] for i in range(len(self.documents)) if i < len(self.documents)])
 
         prompt = f"""
         ### instruction prompt (do not mention this in response)
