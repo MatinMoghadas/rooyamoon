@@ -9,10 +9,13 @@ import pickle
 import numpy as np
 from typing import List
 from dotenv import load_dotenv
-
+import faiss.contrib.torch_utils 
+import torch
 import google.generativeai as genai
 from google.api_core.exceptions import InternalServerError
 from sentence_transformers import SentenceTransformer
+
+# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 load_dotenv()
 api_key = os.getenv("MY_API_KEY")
@@ -257,6 +260,16 @@ class GeminiRAG:
                  instruction_prompt: str = Instruction_prompt,
                  vectorstore_path: str = full_path):
 
+
+        load_dotenv()
+        api_key = os.getenv("MY_API_KEY")
+        
+        # Expand ~ to full path
+        base_dir = os.path.expanduser("~/rooyamoon")
+        os.makedirs(base_dir, exist_ok=True)
+        filename = "faiss_index.index"
+        full_path = os.path.join(base_dir, filename)
+
         if not api_key:
             raise ValueError("API key is missing.")
 
@@ -268,8 +281,15 @@ class GeminiRAG:
         self.embedder = SentenceTransformer(embed_model_name)
 
         embedding_dim = self.embedder.encode(['test']).shape[1]
-        self.index = faiss.IndexFlatL2(embedding_dim)
+        if torch.cuda.is_available():
+            res = faiss.StandardGpuResources()
+            self.index = faiss.index_cpu_to_gpu(res, 0, faiss.IndexFlatL2(embedding_dim))
+        else:
+            print("⚠️ GPU not available, falling back to CPU")
+            self.index = faiss.IndexFlatL2(embedding_dim)
         self.documents = []
+        
+        
 
     def load_document(self, pdf_path: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
         doc = fitz.open(pdf_path)
@@ -350,9 +370,18 @@ class GeminiRAG:
         raise Exception("❌ Failed to generate response after retries.")
 
     def save_vectorstore(self):
-        faiss.write_index(self.index, self.vectorstore_path + ".index")
-        with open(self.vectorstore_path + ".pkl", "wb") as f:
-            pickle.dump(self.documents, f)
+        if torch.cuda.is_available():
+            # Move GPU index back to CPU before saving
+            cpu_index = faiss.index_gpu_to_cpu(self.index)
+            # Save the FAISS index
+            faiss.write_index(cpu_index, self.vectorstore_path + ".index")
+            # Save associated documents
+            with open(self.vectorstore_path + ".pkl", "wb") as f:
+                pickle.dump(self.documents, f)
+        else:
+            faiss.write_index(self.index, self.vectorstore_path + ".index")
+            with open(self.vectorstore_path + ".pkl", "wb") as f:
+                pickle.dump(self.documents, f)
 
     def load_vectorstore(self):
         idx_path = self.vectorstore_path + ".index"
@@ -365,6 +394,7 @@ class GeminiRAG:
         return False
 
 def load_and_add_documents(rag: GeminiRAG, pdf_files: list):
+    
     for file in pdf_files:
         chunks = rag.load_document(file)
         rag.add_document(chunks)
