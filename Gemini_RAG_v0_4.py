@@ -16,7 +16,7 @@ import torch
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # load_dotenv()  # Loads variables from .env into environment
-api_key = os.getenv("AIzaSyDyqFnRcpCnMeSEC9yffC6Uw7WsM59E_hg")
+api_key = os.getenv("MY_API_KEY")
 
 Instruction_prompt= """شخصیت و موقعیت:
 
@@ -416,7 +416,7 @@ def chat_loop(rag):
 
 
 def main():
-    rag = GeminiRAG(api_key='AIzaSyDyqFnRcpCnMeSEC9yffC6Uw7WsM59E_hg')
+    rag = GeminiRAG(api_key=api_key)
     if rag.load_vectorstore():
         print("📦 Loaded vectorstore from Google Drive.")
     else:
