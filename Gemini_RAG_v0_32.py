@@ -297,6 +297,20 @@ class GeminiRAG:
 
         raise RuntimeError("❌ Failed to generate valid challenges after 3 retries.")
 
+    def summarize_history(self, chat_history):
+        prompt = f"""summarize the most important part of {chat_history} 
+        - maximum length of the summary is 100 words"""
+
+        for attempt in range(3):
+            try:
+                response = self.model.generate_content(prompt)
+                return response.text.strip()
+            except InternalServerError as e:
+                print(f"⚠️ Error: {e}. Retrying...")
+                time.sleep(5)
+
+        raise Exception("❌ Failed to generate response after retries.")
+
     async def ask_question(self, query: str, challange: str = "", top_k: int = 5) -> str:
         query_emb = await asyncio.to_thread(self.embedder.encode, [query], convert_to_numpy=True)
         # query_emb = self.embedder.encode([query], convert_to_numpy=True)
@@ -311,7 +325,7 @@ class GeminiRAG:
                 {context}
                 Question: {query}
                 User is interested in this challenge: {challange}
-                Chat history: {self.chat_history}
+                Chat history: {self.summarize_history(self.chat_history)}
                 use chat history to know what have you said to user previously and continue the conversation
                 Answer:"""
 
