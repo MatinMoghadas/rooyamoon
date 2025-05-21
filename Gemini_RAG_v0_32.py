@@ -312,19 +312,8 @@ class GeminiRAG:
                 Question: {query}
                 User is interested in this challenge: {challange}
                 Chat history: {self.chat_history}
-                use chat history to know what have you said to user previously and answer him based on that history
+                use chat history to know what have you said to user previously and continue the conversation
                 Answer:"""
-
-        # without retrieved->
-        # prompt = f"""
-        # ### instruction prompt (do not mention this in response)
-        # {self.instruction_prompt}
-        # Context:
-        # {context}
-        # Question: {query}
-        # User is interested in this challenge: {challange}
-        # Answer:"""
-
 
         for attempt in range(3):
             try:
@@ -380,11 +369,10 @@ async def chat_loop(rag: GeminiRAG):
             response = await rag.ask_question(user_input, challange=chosen_challenge)
             rag.chat_history[f'bot_{count}'] = response
             count += 1
-            count += 1
-            print('رویامون:', response)
-            print('-' * 40)
-            print(f"📌 چالش‌ها: {challenges}")
-            print('-' * 40)
+            # print('رویامون:', response)
+            # print('-' * 40)
+            # print(f"📌 چالش‌ها: {challenges}")
+            # print('-' * 40)
         except Exception as e:
             print(f"❌ خطا: {e}")
 
