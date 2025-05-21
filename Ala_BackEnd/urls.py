@@ -8,7 +8,7 @@ from .views import (
     SavedCardDeleteAPIView, CommentLikeView,
     CommentUnlikeView, UpdateCommentView,
     MentionUserListAPIView, CardCommentsRepliesAPIView,
-    GeminiChatAPIView
+    GeminiChatChallengeAPIView, GeminiChatWishAPIView
     # CommentReplyViewSet, CardCommentsRepliesAPIView, CommentReplyUpdateViewSet,
     # CommentReplyLikeView, ReplyUnlikeView,
 )
@@ -32,6 +32,8 @@ urlpatterns = [
     path('api/saved-cards/', SavedCardAPIView.as_view(), name='saved-cards'),
     path('api/saved-cards/<int:card_id>/', SavedCardDeleteAPIView.as_view(), name='delete-saved-card'),
     path('api/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
+    path("api/chat/challenge", GeminiChatChallengeAPIView.as_view(), name="gemini-chat-challenge"),
+    path("api/chat/wish", GeminiChatWishAPIView.as_view(), name="gemini-chat-wish"),
     path("auth/login/", OTPLoginView.as_view(), name="otp-login"),
     path("auth/verify/", OTPVerificationView.as_view(), name="otp-verify"),
     path("user/profile/", UserProfileView.as_view(), name="user-profile"),
@@ -43,7 +45,6 @@ urlpatterns = [
     path("redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     path('api/cards/<int:card_id>/comments/', CardCommentsRepliesAPIView.as_view(),
          name='card-comments-replies'),
-    path("api/chat/", GeminiChatAPIView.as_view(), name="gemini-chat"),
 
     # path('api/replies/like/', CommentReplyLikeView.as_view(), name='reply-like'),
     # path('api/replies/unlike/', ReplyUnlikeView.as_view(), name='reply-unlike'),

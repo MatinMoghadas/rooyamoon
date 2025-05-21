@@ -34,6 +34,8 @@ class Card(models.Model):
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cards')
     created_at = models.DateTimeField(auto_now_add=True)
     like_count = models.IntegerField(default=0)
+    comment_count = models.IntegerField(default=0)
+    saved_count = models.IntegerField(default=0)
 
     def __str__(self):
         return self.content[:50]

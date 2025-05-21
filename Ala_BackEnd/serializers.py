@@ -156,32 +156,42 @@ class CommentWithRepliesCreatorSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Comment
-        fields = [
-            'id',
-            'creator',
-            'content',
-            'mentionedUserIds',
-            'parentId',
-            'createdAt',
-            'replies',
-        ]
+        fields = '__all__'
 
     def get_creator(self, obj):
+        """
+        Returns the username of the creator (e.g., "بات تحلیل گر آرزو").
+        """
         if obj.creator and obj.creator.username:
             return obj.creator.username
-        return f"u{obj.creator.id}"
+        return f"u{obj.creator.id}"  # Fallback if no username
 
     def get_mentionedUserIds(self, obj):
-        return [f"u{user.id}" for user in obj.mentions.all()]
+        """
+        Returns mentioned users as usernames if available, else 'u<id>'.
+        """
+        return [
+            user.username if user.username else f"u{user.id}"
+            for user in obj.mentions.all()
+        ]
 
     def get_parentId(self, obj):
+        """
+        Returns the parent comment ID in 'c{id}' format if it exists.
+        """
         return f"c{obj.parent.id}" if obj.parent else None
 
     def get_createdAt(self, obj):
+        """
+        Returns the ISO-formatted datetime string.
+        """
         return obj.created_at.isoformat()
 
     def get_replies(self, obj):
-        children = obj.replies.all()
+        """
+        Returns nested replies using the same serializer recursively.
+        """
+        children = obj.replies.all().order_by('created_at')  # Optional ordering
         return CommentWithRepliesCreatorSerializer(children, many=True, context=self.context).data
 
 
@@ -305,11 +315,11 @@ class SavedCardSerializer(serializers.ModelSerializer):
 
 class CardSerializer(serializers.ModelSerializer):
     creator = serializers.SerializerMethodField()
-    is_saved = serializers.SerializerMethodField()  # ✅ Add is_saved
+    is_saved = serializers.SerializerMethodField()
 
     class Meta:
         model = Card
-        fields = ['id', 'content', 'challenge', 'creator', 'created_at', 'like_count', 'is_saved']
+        fields = '__all__'
 
     def get_creator(self, obj):
         return obj.creator.username if obj.creator.username else obj.creator.id

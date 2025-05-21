@@ -1,11 +1,9 @@
 import asyncio
-
 from django.core.cache import cache
 from django.db import DatabaseError, IntegrityError
 from django.shortcuts import get_object_or_404
-# from django.utils import asyncio
 from drf_spectacular.types import OpenApiTypes
-from Gemini_RAG_v0_32 import GeminiRAG as rag
+from Gemini_RAG_v0_32 import GeminiRAG
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView
 from rest_framework.views import APIView
@@ -14,7 +12,7 @@ from rest_framework import status, viewsets, permissions
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from . import serializers
-from .models import User, Card, Notification, Comment, SavedCard, CommentLike  #CommentReply, CommentReplyLike,
+from .models import User, Card, Notification, Comment, SavedCard, CommentLike  # CommentReply, CommentReplyLike,
 from .serializers import (
     OTPLoginSerializer, UserSerializer, UserRegistrationSerializer,
     CardSerializer, NotificationSerializer, LoginSerializer, CommentSerializer,
@@ -27,11 +25,13 @@ from .utils import generate_otp, verify_otp, get_or_create_user, generate_tokens
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import logging
-# from .gemini_rag import GeminiRAG
+
 User = get_user_model()
 logger = logging.getLogger(__name__)
+
+# from .gemini_rag import GeminiRAG
 # api_key = getattr(settings, "MY_API_KEY", None)
-# rag = GeminiRAG(api_key=api_key)
+rag = GeminiRAG(api_key="AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0")
 # rag.load_vectorstore()
 
 
@@ -377,7 +377,11 @@ class CardViewSet(viewsets.ModelViewSet):
                             "id": {"type": "integer", "example": 1},
                             "content": {"type": "string", "example": "This is a sample card"},
                             "creator": {"type": "string", "example": "Creator Username"},
-                            "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+                            "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
+                            "gemini_response": {
+                                "type": "string",
+                                "example": "برای مهندس شدن باید ریاضیات و فیزیک را خوب یاد بگیری."
+                            }
                         }
                     }
                 }
@@ -401,12 +405,36 @@ class CardViewSet(viewsets.ModelViewSet):
 
         if serializer.is_valid():
             self.perform_create(serializer)
+            card_instance = serializer.instance
+            card_data = serializer.data
+
+            # Generate Gemini response
+            try:
+                gemini_handler = GeminiChatWishAPIView()
+                user_message = card_data.get("content")
+                challenge = request.data.get("challenge") or "چالش ۱"
+                result = asyncio.run(gemini_handler.handle_rag_chat(user_message, challenge))
+                gemini_response = result.get("response", "")
+
+                bot_user = User.objects.get(username="بات تحلیل گر آرزو")
+                # 👇 Automatically create a comment with Gemini's response
+                Comment.objects.create(
+                    card=card_instance,
+                    creator=bot_user,
+                    content=gemini_response
+                )
+
+            except Exception as e:
+                gemini_response = f"خطا در دریافت پاسخ Gemini: {str(e)}"
 
             return Response({
-                "statusCode": 200,  # ✅ Return 200 instead of 201
+                "statusCode": 200,
                 "messages": ["Card created successfully."],
-                "result": serializer.data
-            }, status=status.HTTP_200_OK)  # ✅ Explicitly set status to 200
+                "result": {
+                    **card_data,
+                    "gemini_response": gemini_response
+                }
+            }, status=status.HTTP_200_OK)
 
         return Response({
             "statusCode": 400,
@@ -450,7 +478,7 @@ class CardViewSet(viewsets.ModelViewSet):
         return Response({
             "statusCode": 200,
             "messages": ["Card retrieved successfully."],
-            "result": serializer.data  # ✅ This ensures "is_saved" is included
+            "result": serializer.data
         }, status=status.HTTP_200_OK)
 
     @extend_schema(
@@ -614,25 +642,36 @@ class CommentViewSet(viewsets.ModelViewSet):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 200},
-                    "messages": {"type": "array", "items": {"type": "string"},
-                                 "example": ["Comment created successfully."]},
+                    "messages": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["Comment created successfully."]
+                    },
                     "result": {
                         "type": "object",
                         "properties": {
                             "id": {"type": "integer", "example": 1},
-                            "content": {"type": "string", "example": "New comment"},
-                            "creator": {"type": "string", "example": "username"},
+                            "content": {"type": "string", "example": "چی فکر می‌کنید بات تحلیل‌گر آرزو؟"},
+                            "creator": {"type": "string", "example": "normal_user"},
                             "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
                         }
                     }
-                }
+                },
+                "description": (
+                        "Creates a comment. "
+                        "If the comment mentions the bot user `بات تحلیل‌گر آرزو`, "
+                        "an AI-generated reply will be posted automatically as a new comment from the bot."
+                )
             },
             400: {
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 400},
-                    "messages": {"type": "array", "items": {"type": "string"},
-                                 "example": ["Failed to create comment."]},
+                    "messages": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["Failed to create comment."]
+                    },
                     "errors": {"type": "object"}
                 }
             }
@@ -641,15 +680,41 @@ class CommentViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            # Save the comment (but don't commit to DB yet)
+            # Save the comment
             comment = serializer.save()
 
-            # # Extract mentions from content
-            # content = serializer.validated_data.get("content", "")
-            # mentioned_users = extract_mentions(content)
-            #
-            # # Add mentioned users to comment
-            # comment.mentions.set(mentioned_users)
+            content = serializer.validated_data.get("content", "")
+            card = comment.card
+
+            mentions = serializer.data.get("mentions")
+            # Check if the bot is mentioned
+            if "بات تحلیل گر آرزو" in mentions:
+                try:
+                    User = get_user_model()
+                    bot_user = User.objects.get(username="بات تحلیل گر آرزو")
+                except User.DoesNotExist:
+                    bot_user = None
+
+                if bot_user:
+                    try:
+                        # Generate AI response using card content or comment
+                        user_message = comment.content
+                        challenge = request.data.get("challenge") or "چالش ۱"
+
+                        gemini_handler = GeminiChatWishAPIView()
+                        gemini_response = asyncio.run(
+                            gemini_handler.handle_rag_chat(user_message, challenge)
+                        ).get("response", "")
+
+                        # Create the bot's comment in response
+                        Comment.objects.create(
+                            card=card,
+                            creator=bot_user,
+                            content=gemini_response,
+                            parent=comment  # 👈 Set the parent here
+                        )
+                    except Exception as e:
+                        print(f"Gemini Error: {e}")  # Optionally log
 
             return Response({
                 "statusCode": 200,
@@ -1045,7 +1110,7 @@ class UpdateCommentView(APIView):
                 "type": "object",
                 "properties": {
                     "comment_id": {"type": "integer", "example": 1},
-                    "content": {"type": "string", "example": "Updated comment with @username"},
+                    "content": {"type": "string", "example": "Updated comment with @بات تحلیل گر آرزو"},
                     "mentions": {
                         "type": "array",
                         "items": {"type": "integer", "example": 2},
@@ -1060,47 +1125,26 @@ class UpdateCommentView(APIView):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 200},
-                    "messages": {"type": "array", "items": {"type": "string"},
-                                 "example": ["Comment updated successfully."]},
+                    "messages": {"type": "array", "items": {"type": "string"}},
                     "result": {
                         "type": "object",
                         "properties": {
-                            "id": {"type": "integer", "example": 1},
-                            "content": {"type": "string", "example": "Updated comment content"},
-                            "creator": {"type": "string", "example": "Creator Username"},
+                            "id": {"type": "integer"},
+                            "content": {"type": "string"},
+                            "creator": {"type": "string"},
                             "mentions": {
                                 "type": "array",
-                                "items": {"type": "string"},
-                                "example": ["admin", "john_doe"]
+                                "items": {"type": "string"}
                             },
-                            "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"}
+                            "created_at": {"type": "string"}
                         }
                     }
-                }
-            },
-            400: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 400},
-                    "messages": {"type": "array", "items": {"type": "string"},
-                                 "example": ["Failed to update comment."]},
-                    "errors": {"type": "object"}
-                }
-            },
-            404: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 404},
-                    "messages": {"type": "array", "items": {"type": "string"},
-                                 "example": ["Comment not found."]}
                 }
             }
         }
     )
     def put(self, request, *args, **kwargs):
-        """Update a comment by providing comment_id in the request body."""
         comment_id = request.data.get("comment_id")
-
         if not comment_id:
             return Response({
                 "statusCode": 400,
@@ -1108,34 +1152,67 @@ class UpdateCommentView(APIView):
                 "errors": {"comment_id": ["This field is required."]}
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get the comment
         comment = get_object_or_404(Comment, id=comment_id)
 
-        # Check permissions
         if request.user != comment.creator and not request.user.is_staff:
             return Response({
                 "statusCode": 403,
                 "messages": ["You do not have permission to update this comment."]
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # Deserialize and validate
         serializer = CommentSerializer(comment, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            comment = serializer.save()
 
-            # Extract mentions from content and merge with explicitly passed mentions
-            updated_content = serializer.validated_data.get("content", "")
-            content_mentions = extract_mentions(updated_content)
-            passed_mentions = serializer.validated_data.get("mentions", [])
-
-            # Combine both (avoid duplicates)
+            # Mention handling
+            content = serializer.validated_data.get("content", "")
+            content_mentions = extract_mentions(content)
+            passed_mentions = request.data.get("mentions", [])
             all_mentions = list(set(passed_mentions) | set(content_mentions))
             comment.mentions.set(all_mentions)
+
+            # Formatted for response
+            formatted_mentions = [
+                user.username if user.username else f"u{user.id}"
+                for user in comment.mentions.all()
+            ]
+
+            # Gemini AI bot handling
+            try:
+                User = get_user_model()
+                bot_user = User.objects.get(username="بات تحلیل گر آرزو")
+            except User.DoesNotExist:
+                bot_user = None
+
+            if bot_user and bot_user in comment.mentions.all():
+                try:
+                    user_message = comment.content
+                    challenge = request.data.get("challenge", "چالش ۱")
+
+                    gemini_handler = GeminiChatWishAPIView()
+                    gemini_response = asyncio.run(
+                        gemini_handler.handle_rag_chat(user_message, challenge)
+                    ).get("response", "")
+
+                    Comment.objects.create(
+                        card=comment.card,
+                        creator=bot_user,
+                        content=gemini_response,
+                        parent=comment
+                    )
+                except Exception as e:
+                    print(f"Gemini Error: {e}")
 
             return Response({
                 "statusCode": 200,
                 "messages": ["Comment updated successfully."],
-                "result": serializer.data
+                "result": {
+                    "id": comment.id,
+                    "content": comment.content,
+                    "creator": comment.creator.username if comment.creator.username else f"u{comment.creator.id}",
+                    "mentions": formatted_mentions,
+                    "created_at": comment.created_at.isoformat()
+                }
             }, status=status.HTTP_200_OK)
 
         return Response({
@@ -1143,6 +1220,8 @@ class UpdateCommentView(APIView):
             "messages": ["Failed to update comment."],
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 
 # class CommentReplyViewSet(viewsets.ModelViewSet):
@@ -2048,7 +2127,7 @@ class CommentLikeView(APIView):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 200},
-                    "message": {
+                    "messages": {
                         "type": "array",
                         "items": {"type": "string"},
                         "example": ["Like added successfully"]
@@ -2060,7 +2139,7 @@ class CommentLikeView(APIView):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 400},
-                    "message": {
+                    "messages": {
                         "type": "array",
                         "items": {"type": "string"},
                         "example": ["Already liked", "Comment ID is required"]
@@ -2078,7 +2157,7 @@ class CommentLikeView(APIView):
         if not comment_id:
             return Response({
                 "statusCode": 400,
-                "message": ["Comment ID is required"],
+                "messages": ["Comment ID is required"],
                 "result": []
             }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2087,7 +2166,7 @@ class CommentLikeView(APIView):
         if CommentLike.objects.filter(user=user, comment=comment).exists():
             return Response({
                 "statusCode": 400,
-                "message": ["Already liked"],
+                "messages": ["Already liked"],
                 "result": []
             }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2100,7 +2179,7 @@ class CommentLikeView(APIView):
         serializer = CommentSerializer(comment, context={"request": request})
         return Response({
             "statusCode": 200,
-            "message": ["Like added successfully"],
+            "messages": ["Like added successfully"],
             "result": serializer.data
         }, status=status.HTTP_200_OK)
 
@@ -2124,7 +2203,7 @@ class CommentUnlikeView(GenericAPIView):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 200},
-                    "message": {
+                    "messages": {
                         "type": "array",
                         "items": {"type": "string"},
                         "example": ["Like removed successfully"]
@@ -2136,7 +2215,7 @@ class CommentUnlikeView(GenericAPIView):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 400},
-                    "message": {
+                    "messages": {
                         "type": "array",
                         "items": {"type": "string"},
                         "example": ["Not liked yet", "Comment ID is required"]
@@ -2154,7 +2233,7 @@ class CommentUnlikeView(GenericAPIView):
         if not comment_id:
             return Response({
                 "statusCode": 400,
-                "message": ["Comment ID is required"],
+                "messages": ["Comment ID is required"],
                 "result": []
             }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2164,7 +2243,7 @@ class CommentUnlikeView(GenericAPIView):
         if not like:
             return Response({
                 "statusCode": 400,
-                "message": ["Not liked yet"],
+                "messages": ["Not liked yet"],
                 "result": []
             }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2177,7 +2256,7 @@ class CommentUnlikeView(GenericAPIView):
         serializer = CommentSerializer(comment, context={"request": request})
         return Response({
             "statusCode": 200,
-            "message": ["Like removed successfully"],
+            "messages": ["Like removed successfully"],
             "result": serializer.data
         }, status=status.HTTP_200_OK)
 
@@ -2202,7 +2281,7 @@ class CommentUnlikeView(GenericAPIView):
 #                 "type": "object",
 #                 "properties": {
 #                     "statusCode": {"type": "integer", "example": 200},
-#                     "message": {
+#                     "messages": {
 #                         "type": "array",
 #                         "items": {"type": "string"},
 #                         "example": ["Like added successfully"]
@@ -2214,7 +2293,7 @@ class CommentUnlikeView(GenericAPIView):
 #                 "type": "object",
 #                 "properties": {
 #                     "statusCode": {"type": "integer", "example": 400},
-#                     "message": {
+#                     "messages": {
 #                         "type": "array",
 #                         "items": {"type": "string"},
 #                         "example": ["Already liked", "Reply ID is required"]
@@ -2232,7 +2311,7 @@ class CommentUnlikeView(GenericAPIView):
 #         if not reply_id:
 #             return Response({
 #                 "statusCode": 400,
-#                 "message": ["Reply ID is required"],
+#                 "messages": ["Reply ID is required"],
 #                 "result": []
 #             }, status=status.HTTP_400_BAD_REQUEST)
 #
@@ -2241,7 +2320,7 @@ class CommentUnlikeView(GenericAPIView):
 #         if CommentReplyLike.objects.filter(user=user, reply=reply).exists():
 #             return Response({
 #                 "statusCode": 400,
-#                 "message": ["Already liked"],
+#                 "messages": ["Already liked"],
 #                 "result": []
 #             }, status=status.HTTP_400_BAD_REQUEST)
 #
@@ -2254,7 +2333,7 @@ class CommentUnlikeView(GenericAPIView):
 #         serializer = CommentReplySerializer(reply, context={"request": request})
 #         return Response({
 #             "statusCode": 200,
-#             "message": ["Like added successfully"],
+#             "messages": ["Like added successfully"],
 #             "result": serializer.data
 #         }, status=status.HTTP_200_OK)
 #
@@ -2278,7 +2357,7 @@ class CommentUnlikeView(GenericAPIView):
 #                 "type": "object",
 #                 "properties": {
 #                     "statusCode": {"type": "integer", "example": 200},
-#                     "message": {
+#                     "messages": {
 #                         "type": "array",
 #                         "items": {"type": "string"},
 #                         "example": ["Like removed successfully"]
@@ -2290,7 +2369,7 @@ class CommentUnlikeView(GenericAPIView):
 #                 "type": "object",
 #                 "properties": {
 #                     "statusCode": {"type": "integer", "example": 400},
-#                     "message": {
+#                     "messages": {
 #                         "type": "array",
 #                         "items": {"type": "string"},
 #                         "example": ["Not liked yet", "Reply ID is required"]
@@ -2308,7 +2387,7 @@ class CommentUnlikeView(GenericAPIView):
 #         if not reply_id:
 #             return Response({
 #                 "statusCode": 400,
-#                 "message": ["Reply ID is required"],
+#                 "messages": ["Reply ID is required"],
 #                 "result": []
 #             }, status=status.HTTP_400_BAD_REQUEST)
 #
@@ -2318,7 +2397,7 @@ class CommentUnlikeView(GenericAPIView):
 #         if not like:
 #             return Response({
 #                 "statusCode": 400,
-#                 "message": ["Not liked yet"],
+#                 "messages": ["Not liked yet"],
 #                 "result": []
 #             }, status=status.HTTP_400_BAD_REQUEST)
 #
@@ -2331,7 +2410,7 @@ class CommentUnlikeView(GenericAPIView):
 #         serializer = CommentReplySerializer(reply, context={"request": request})
 #         return Response({
 #             "statusCode": 200,
-#             "message": ["Like removed successfully"],
+#             "messages": ["Like removed successfully"],
 #             "result": serializer.data
 #         }, status=status.HTTP_200_OK)
 
@@ -2356,7 +2435,7 @@ class MentionUserListAPIView(APIView):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 200},
-                    "message": {
+                    "messages": {
                         "type": "array",
                         "items": {"type": "string"},
                         "example": ["Mentionable users fetched successfully"]
@@ -2387,35 +2466,25 @@ class MentionUserListAPIView(APIView):
 
         return Response({
             "statusCode": 200,
-            "message": ["Mentionable users fetched successfully"],
+            "messages": ["Mentionable users fetched successfully"],
             "result": serialized_users
         }, status=status.HTTP_200_OK)
 
 
-def swagger_auto_schema(operation_description, request_body, responses):
-    pass
-
-
-class GeminiChatAPIView(APIView):
-    """
-    POST /api/chat/
-    Input: {"message": "می‌خوام مهندس بشم"}
-    Output: challenges + AI response
-    """
-
+class GeminiChatChallengeAPIView(APIView):
     @extend_schema(
-        summary="Gemini AI Chat",
-        description="ارسال پیام به مدل Gemini و دریافت پاسخ به همراه چالش‌ها.",
+        summary="Gemini AI Challenge Generator",
+        description="ارسال پیام به مدل Gemini و دریافت فهرستی از چالش‌ها.",
         request={
             "application/json": {
                 "type": "object",
                 "properties": {
-                    "message": {
+                    "content": {
                         "type": "string",
                         "example": "می‌خوام مهندس بشم"
                     }
                 },
-                "required": ["message"]
+                "required": ["messages"]
             }
         },
         responses={
@@ -2423,12 +2492,87 @@ class GeminiChatAPIView(APIView):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 200},
-                    "message": {"type": "string", "example": "موفق"},
+                    "messages": {"type": "string", "example": "موفق"},
                     "challenges": {
                         "type": "array",
                         "items": {"type": "string"},
                         "example": ["چالش ۱", "چالش ۲", "چالش ۳"]
+                    }
+                }
+            },
+            400: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 400},
+                    "messages": {"type": "string", "example": "message is required."}
+                }
+            },
+            500: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 500},
+                    "messages": {"type": "string", "example": "خطا: خطای پیش‌بینی نشده"}
+                }
+            }
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        user_message = request.data.get("content")
+        if not user_message:
+            return Response({
+                "statusCode": 400,
+                "messages": "message is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = asyncio.run(self.handle_rag_chat(user_message))
+            return Response({
+                "statusCode": 200,
+                "messages": "موفق",
+                "result": result,
+                # "response": result["response"]
+            })
+
+        except Exception as e:
+            return Response({
+                "statusCode": 500,
+                "messages": [f"خطا: {str(e)}"],
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    async def handle_rag_chat(self, user_input):
+        challenges = await rag.generate_challenges(query=user_input)
+        # chosen_challenge = challenges[0]
+        # response = await rag.ask_question(query=user_input, challange=chosen_challenge)
+        # return {"challenges": challenges, "response": response}
+        return {"response": challenges}
+
+
+class GeminiChatWishAPIView(APIView):
+    @extend_schema(
+        summary="Gemini AI Chat",
+        description="ارسال پیام به مدل Gemini و دریافت پاسخ به همراه چالش‌ها.",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "messages": {
+                        "type": "string",
+                        "example": "می‌خوام مهندس بشم"
                     },
+                    "challange": {
+                        "type": "string",
+                        "example": "چالش ۱"
+                    }
+                },
+                "required": ["messages", "challange"]
+            }
+        },
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 200},
+                    "messages": {"type": "string", "example": "موفق"},
                     "response": {
                         "type": "string",
                         "example": "برای مهندس شدن باید ریاضیات و فیزیک را خوب یاد بگیری."
@@ -2439,48 +2583,54 @@ class GeminiChatAPIView(APIView):
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 400},
-                    "message": {"type": "string", "example": "message is required."}
+                    "messages": {"type": "string", "example": "message is required."}
                 }
             },
             500: {
                 "type": "object",
                 "properties": {
                     "statusCode": {"type": "integer", "example": 500},
-                    "message": {"type": "string", "example": "خطا: خطای پیش‌بینی نشده"}
+                    "messages": {"type": "string", "example": "خطا: خطای پیش‌بینی نشده"}
                 }
             }
         }
     )
     def post(self, request, *args, **kwargs):
-        user_message = request.data.get("message")
+        user_message = request.data.get("messages")
+        challange = request.data.get("challange")
         if not user_message:
             return Response({
                 "statusCode": 400,
-                "message": "message is required."
+                "messages": "message is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not challange:
+            return Response({
+                "statusCode": 400,
+                "messages": "challange is required."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            result = asyncio.run(self.handle_rag_chat(user_message))
+            result = asyncio.run(self.handle_rag_chat(user_message, challange))
             return Response({
                 "statusCode": 200,
-                "message": "موفق",
-                "challenges": result["challenges"],
-                "response": result["response"]
+                "messages": "موفق",
+                # "challenges": result["challenges"],
+                "result": result["response"]
             })
 
         except Exception as e:
             return Response({
                 "statusCode": 500,
-                "message": f"خطا: {str(e)}"
+                "messages": f"خطا: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    async def handle_rag_chat(self, user_input):
-        # challenges = await rag.generate_challenges(user_input)
+    async def handle_rag_chat(self, user_input, challange):
+        # challenges = await rag.generate_challenges(query=user_input)
         # chosen_challenge = challenges[0]
-        response = await rag.ask_question(query=user_input, challange="chosen_challenge")
-        # return {""challenges": challenges," "response": response}
+        response = await rag.ask_question(query=user_input, challange=challange)
+        # return {"challenges": challenges, "response": response}
         return {"response": response}
-
 
 
 class NotificationView(APIView):
