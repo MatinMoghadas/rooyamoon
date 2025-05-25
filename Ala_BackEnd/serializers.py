@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from .models import (User, Card, Notification, Comment,
-                     #CommentReply,
+    #CommentReply,
                      SavedCard, CommentLike,
-                     #CommentReplyLike
+    #CommentReplyLike
                      )
 from .utils import get_display_username, extract_mentions
 
@@ -194,6 +194,52 @@ class CommentWithRepliesCreatorSerializer(serializers.ModelSerializer):
         children = obj.replies.all().order_by('created_at')  # Optional ordering
         return CommentWithRepliesCreatorSerializer(children, many=True, context=self.context).data
 
+
+class FlatCommentWithMetaSerializer(serializers.ModelSerializer):
+    creator = serializers.SerializerMethodField()
+    mentionedUserIds = serializers.SerializerMethodField()
+    parentId = serializers.SerializerMethodField()
+    createdAt = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = '__all__'
+
+    def get_creator(self, obj):
+        if obj.creator and obj.creator.username:
+            return obj.creator.username
+        return f"u{obj.creator.id}"
+
+    def get_mentionedUserIds(self, obj):
+        return [
+            user.username if user.username else f"u{user.id}"
+            for user in obj.mentions.all()
+        ]
+
+    def get_parentId(self, obj):
+        return f"c{obj.parent.id}" if obj.parent else None
+
+    def get_createdAt(self, obj):
+        return obj.created_at.isoformat()
+
+    def get_type(self, obj):
+        return 'reply' if obj.parent else 'comment'
+
+
+class CardDetailSerializer(serializers.ModelSerializer):
+    creator = serializers.StringRelatedField()
+    is_saved = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Card
+        fields = '__all__'  # or list explicitly like: ['id', 'creator', ..., 'is_saved']
+
+    def get_is_saved(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            return SavedCard.objects.filter(card=obj, user=request.user).exists()
+        return False
 
 # class CommentReplySerializer(serializers.ModelSerializer):
 #     user = serializers.SerializerMethodField()

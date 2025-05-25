@@ -16,12 +16,14 @@ from .models import User, Card, Notification, Comment, SavedCard, CommentLike  #
 from .serializers import (
     OTPLoginSerializer, UserSerializer, UserRegistrationSerializer,
     CardSerializer, NotificationSerializer, LoginSerializer, CommentSerializer,
-    SavedCardSerializer, MentionUserSerializer, CommentWithRepliesCreatorSerializer
+    SavedCardSerializer, MentionUserSerializer, CommentWithRepliesCreatorSerializer,
+    FlatCommentWithMetaSerializer, CardDetailSerializer
     # CommentWithRepliesCreatorSerializer, CommentReplySerializer, CommentWithRepliesSerializer,
 )
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
-from .utils import generate_otp, verify_otp, get_or_create_user, generate_tokens_for_user, extract_mentions
+from .utils import generate_otp, verify_otp, get_or_create_user, generate_tokens_for_user, extract_mentions, \
+    send_otp_sms
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import logging
@@ -32,6 +34,8 @@ logger = logging.getLogger(__name__)
 # from .gemini_rag import GeminiRAG
 # api_key = getattr(settings, "MY_API_KEY", None)
 rag = GeminiRAG(api_key="AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0")
+
+
 # rag.load_vectorstore()
 
 
@@ -48,7 +52,7 @@ class OTPLoginView(APIView):
                     "messages": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "example": ["کد کلید با موفقیت ارسال شد."]
+                        "example": ["کد تایید با موفقیت ارسال شد."]
                     },
                     "total": {"type": "integer", "example": 0},
                     "page": {"type": "integer", "example": 1},
@@ -59,8 +63,7 @@ class OTPLoginView(APIView):
                             "phoneNumber": {"type": "string", "example": "09123456789"},
                             "username": {"type": "string", "example": "user_example"},
                             "Full_name": {"type": "string", "example": "Full Name"},
-                            "dataGathering": {"type": "boolean", "example": True},
-                            "test": {"type": "string", "example": "OTP: 123456"}
+                            "dataGathering": {"type": "boolean", "example": True}
                         }
                     }
                 }
@@ -91,20 +94,19 @@ class OTPLoginView(APIView):
         mobile_phone_number = login_serializer.validated_data["mobile_phone_number"]
         user, created = User.objects.get_or_create(mobile_phone_number=mobile_phone_number)
 
-        otp = generate_otp()  # Generate OTP
+        otp = generate_otp()
         cache.set(f"otp:{mobile_phone_number}", otp, timeout=300)
 
-        # Uncomment for production if using an OTP service:
-        # if not send_otp(mobile_phone_number, otp):
-        #     cache.delete(f"otp:{mobile_phone_number}")
-        #     return Response({
-        #         "statusCode": 500,
-        #         "messages": ["Failed to send OTP."]
-        #     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        if not send_otp_sms(mobile_phone_number, otp):
+            cache.delete(f"otp:{mobile_phone_number}")
+            return Response({
+                "statusCode": 500,
+                "messages": ["خطا در ارسال کد تایید."],
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
             "statusCode": 200,
-            "messages": ["کد کلید با موفقیت ارسال شد."],
+            "messages": ["کد تایید با موفقیت ارسال شد."],
             "total": 0,
             "page": 1,
             "perPage": 10,
@@ -113,7 +115,7 @@ class OTPLoginView(APIView):
                 "username": user.username if user.username else "N/A",
                 "Full_name": user.Full_name if user.Full_name else "N/A",
                 "dataGathering": True,
-                "test": f"OTP: {otp}"
+                # "test": f"OTP: {otp}"
             }
         }, status=status.HTTP_200_OK)
 
@@ -325,28 +327,55 @@ class CardViewSet(viewsets.ModelViewSet):
             }
         }
     )
+    # def list(self, request, *args, **kwargs):
+    #     queryset = self.get_queryset()
+    #     total_cards_count = queryset.count()
+    #
+    #     page = self.paginate_queryset(queryset)
+    #
+    #     saved_cards_count = 0
+    #     if request.user.is_authenticated:
+    #         saved_cards_count = SavedCard.objects.filter(user=request.user).count()
+    #
+    #     if page is not None:
+    #         serializer = self.get_serializer(page, many=True, context={'request': request})
+    #         return self.get_paginated_response(serializer.data, saved_cards_count)
+    #
+    #     serializer = self.get_serializer(queryset, many=True, context={'request': request})
+    #     return Response({
+    #         "statusCode": 200,
+    #         "messages": ["Cards retrieved successfully."],
+    #         "total": total_cards_count,
+    #         "page": 1,
+    #         "perPage": total_cards_count if total_cards_count > 0 else 1,
+    #         "result": serializer.data  # ✅ Each card will now have "is_saved"
+    #     }, status=status.HTTP_200_OK)
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         total_cards_count = queryset.count()
 
-        page = self.paginate_queryset(queryset)
+        # Get page number and page size
+        page_number = int(request.query_params.get('page', 1))
+        per_page = int(request.query_params.get('perPage', self.pagination_class.page_size))
 
+        # Calculate the custom slice: from 0 to (page_number * per_page)
+        end_index = page_number * per_page
+        paged_queryset = queryset[:end_index]
+
+        # Count saved cards for authenticated users
         saved_cards_count = 0
         if request.user.is_authenticated:
             saved_cards_count = SavedCard.objects.filter(user=request.user).count()
 
-        if page is not None:
-            serializer = self.get_serializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data, saved_cards_count)
+        serializer = self.get_serializer(paged_queryset, many=True, context={'request': request})
 
-        serializer = self.get_serializer(queryset, many=True, context={'request': request})
         return Response({
             "statusCode": 200,
             "messages": ["Cards retrieved successfully."],
             "total": total_cards_count,
-            "page": 1,
-            "perPage": total_cards_count if total_cards_count > 0 else 1,
-            "result": serializer.data  # ✅ Each card will now have "is_saved"
+            "page": page_number,
+            "perPage": per_page,
+            "result": serializer.data
         }, status=status.HTTP_200_OK)
 
     def get_paginated_response(self, data, saved_cards_count):
@@ -1020,83 +1049,106 @@ class CommentViewSet(viewsets.ModelViewSet):
 class CardCommentsRepliesAPIView(APIView):
     permission_classes = []
 
-    @extend_schema(
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Comments and replies retrieved successfully."]
-                    },
-                    "total": {"type": "integer", "example": 5},
-                    "result": {
-                        "type": "object",
-                        "properties": {
-                            "card_id": {"type": "integer", "example": 1},
-                            "comments": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": {"type": "integer", "example": 1},
-                                        "content": {"type": "string", "example": "This is a comment"},
-                                        "card": {"type": "integer", "example": 1},
-                                        "creator": {"type": "string", "example": "User1"},
-                                        "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
-                                        "updated_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
-                                        "replies": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "id": {"type": "integer", "example": 1},
-                                                    "comment": {"type": "integer", "example": 1},
-                                                    "user": {"type": "string", "example": "User2"},
-                                                    "content": {"type": "string", "example": "This is a reply"},
-                                                    "created_at": {"type": "string", "example": "2023-03-05T13:00:00Z"}
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            404: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 404},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Card not found."]
-                    }
-                }
-            }
-        }
-    )
     def get(self, request, card_id, format=None):
         card = get_object_or_404(Card, id=card_id)
 
-        # Only fetch top-level comments
-        comments = Comment.objects.filter(card=card, parent__isnull=True).order_by('-created_at')
+        all_comments = Comment.objects.filter(card=card).order_by('created_at')
 
-        serializer = CommentWithRepliesCreatorSerializer(comments, many=True, context={'request': request})
+        comment_serializer = FlatCommentWithMetaSerializer(all_comments, many=True, context={'request': request})
+        card_serializer = CardDetailSerializer(card, context={'request': request})
+
 
         return Response({
             "statusCode": 200,
             "messages": ["Comments and replies retrieved successfully."],
-            "total": comments.count(),
+            "total": all_comments.count(),
             "result": {
-                "card_id": card.id,
-                "comments": serializer.data
+                "card": card_serializer.data,
+                "comments": comment_serializer.data
             }
         }, status=status.HTTP_200_OK)
+
+
+# class CardCommentsRepliesAPIView(APIView):
+#     permission_classes = []
+#
+#     @extend_schema(
+#         responses={
+#             200: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 200},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Comments and replies retrieved successfully."]
+#                     },
+#                     "total": {"type": "integer", "example": 5},
+#                     "result": {
+#                         "type": "object",
+#                         "properties": {
+#                             "card_id": {"type": "integer", "example": 1},
+#                             "comments": {
+#                                 "type": "array",
+#                                 "items": {
+#                                     "type": "object",
+#                                     "properties": {
+#                                         "id": {"type": "integer", "example": 1},
+#                                         "content": {"type": "string", "example": "This is a comment"},
+#                                         "card": {"type": "integer", "example": 1},
+#                                         "creator": {"type": "string", "example": "User1"},
+#                                         "created_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
+#                                         "updated_at": {"type": "string", "example": "2023-03-05T12:34:56Z"},
+#                                         "replies": {
+#                                             "type": "array",
+#                                             "items": {
+#                                                 "type": "object",
+#                                                 "properties": {
+#                                                     "id": {"type": "integer", "example": 1},
+#                                                     "comment": {"type": "integer", "example": 1},
+#                                                     "user": {"type": "string", "example": "User2"},
+#                                                     "content": {"type": "string", "example": "This is a reply"},
+#                                                     "created_at": {"type": "string", "example": "2023-03-05T13:00:00Z"}
+#                                                 }
+#                                             }
+#                                         }
+#                                     }
+#                                 }
+#                             }
+#                         }
+#                     }
+#                 }
+#             },
+#             404: {
+#                 "type": "object",
+#                 "properties": {
+#                     "statusCode": {"type": "integer", "example": 404},
+#                     "messages": {
+#                         "type": "array",
+#                         "items": {"type": "string"},
+#                         "example": ["Card not found."]
+#                     }
+#                 }
+#             }
+#         }
+#     )
+#     def get(self, request, card_id, format=None):
+#         card = get_object_or_404(Card, id=card_id)
+#
+#         # Only fetch top-level comments
+#         comments = Comment.objects.filter(card=card, parent__isnull=True).order_by('-created_at')
+#
+#         serializer = CommentWithRepliesCreatorSerializer(comments, many=True, context={'request': request})
+#
+#         return Response({
+#             "statusCode": 200,
+#             "messages": ["Comments and replies retrieved successfully."],
+#             "total": comments.count(),
+#             "result": {
+#                 "card_id": card.id,
+#                 "comments": serializer.data
+#             }
+#         }, status=status.HTTP_200_OK)
 
 
 class UpdateCommentView(APIView):
@@ -1220,8 +1272,6 @@ class UpdateCommentView(APIView):
             "messages": ["Failed to update comment."],
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 
 # class CommentReplyViewSet(viewsets.ModelViewSet):
@@ -1783,7 +1833,6 @@ class UpdateCommentView(APIView):
 #                 "comments": serializer.data
 #             }
 #         }, status=status.HTTP_200_OK)
-
 
 class CustomTokenRefreshView(TokenRefreshView):
     @extend_schema(

@@ -2,10 +2,12 @@ import re
 import secrets
 import logging
 import httpx
-from urllib.parse import quote
+import requests
 from django.conf import settings
 from django.core.cache import cache
 import redis
+from requests.auth import HTTPBasicAuth
+
 from .models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -20,35 +22,27 @@ def generate_otp(length=5):
     return "".join(str(secrets.randbelow(10)) for _ in range(length))
 
 
-def send_otp(mobile_phone_number, otp):
-    """Send OTP via external SMS API using Django settings"""
+def send_otp_sms(phone_number: str, otp: str) -> bool:
+    url = "https://smspanel.trez.ir/api/smsApiWithPattern/SendCode"
 
-    sms_api_url = settings.SMS_API_URL
-    username = settings.SMS_API_USERNAME
-    password = settings.SMS_API_PASSWORD
-    from_num = settings.SMS_API_FROM_NUMBER
-
-    message = f"""
-    کد ورود به پلتفرم رویامون
-    @pnapi.ir\n#{otp}
-    """
-    encoded_message = quote(message.strip())
+    payload = {
+        "AccessHash": settings.TREZ_ACCESS_HASH,
+        "PatternId": settings.TREZ_PATTERN_ID,
+        "token1": otp,
+        "Mobile": phone_number
+    }
 
     try:
-        with httpx.Client() as client:
-            response = client.get(
-                f"{sms_api_url}?username={username}&password={password}"
-                f"&from={from_num}&to={mobile_phone_number}&text={encoded_message}",
-                timeout=settings.SMS_TIMEOUT
-            )
-            result = response.text
-            if result == "SendWasSuccessful":
-                logger.info(f"OTP {otp} sent to {mobile_phone_number} successfully.")
-                return True
-            logger.error(f"Failed to send OTP to {mobile_phone_number}. API Response: {result}")
-            return False
+        response = requests.post(
+            url,
+            json=payload,
+            auth=HTTPBasicAuth("09197230398", "MIRHEIDARY@#")
+        )
+        result = response.json()
+        return result
+
     except Exception as e:
-        logger.error(f"Error sending OTP to {mobile_phone_number}: {str(e)}")
+        print(f"Failed to send SMS: {e}")
         return False
 
 
