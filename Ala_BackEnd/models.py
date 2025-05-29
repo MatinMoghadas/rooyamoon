@@ -12,7 +12,7 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
-    username = models.CharField(max_length=255, null=True, blank=True, unique=True)
+    username = models.CharField(max_length=255, null=True, blank=True, unique=  True)
     is_block = models.BooleanField(default=False)
     which_social_media = models.CharField(max_length=30, default="site")
     chat_id = models.CharField(max_length=30, null=True)

@@ -201,10 +201,11 @@ class FlatCommentWithMetaSerializer(serializers.ModelSerializer):
     parentId = serializers.SerializerMethodField()
     createdAt = serializers.SerializerMethodField()
     type = serializers.SerializerMethodField()
+    liked = serializers.SerializerMethodField()  # <-- New field
 
     class Meta:
         model = Comment
-        fields = '__all__'
+        fields = '__all__'  # or list explicitly, and include 'liked'
 
     def get_creator(self, obj):
         if obj.creator and obj.creator.username:
@@ -225,6 +226,12 @@ class FlatCommentWithMetaSerializer(serializers.ModelSerializer):
 
     def get_type(self, obj):
         return 'reply' if obj.parent else 'comment'
+
+    def get_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            return CommentLike.objects.filter(comment=obj, user=request.user).exists()
+        return False
 
 
 class CardDetailSerializer(serializers.ModelSerializer):

@@ -1,0 +1,114 @@
+#version: '3.8'
+#services:
+#  web:
+#    image: django-roya:latest
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      # Django Core Settings
+#      - SECRET_KEY=x8yZ9kWvN2mPqRtX7cL3jF5hG4dS0aB1eU6iO2nT8rY9wM4vQ3z
+#      - DEBUG=False
+#      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,192.168.159.100
+#      - DJANGO_LOG_LEVEL=INFO
+#      # PostgreSQL Database
+#      - DB_NAME=ala
+#      - DB_USER=postgres
+#      - DB_PASSWORD=your-db-password
+#      - DB_HOST=db
+#      - DB_PORT=5432
+#      # Redis Cache
+#      - REDIS_HOST=redis
+#      - REDIS_PORT=6379
+#      - REDIS_DB=1
+#      # SMS API (for OTP sending)
+#      - SMS_API_URL=http://sms.ala.org.ir/SMSInOutBox/SendSms
+#      - SMS_API_USERNAME=macsa
+#      - SMS_API_PASSWORD=your-sms-api-password
+#      - SMS_API_FROM_NUMBER=10000110110142
+#      # Trez SMS Service
+#      - TREZ_ACCESS_HASH=55121220-aec6-4f73-947c-dd62eecea9e9
+#      - TREZ_SENDER_NUMBER=5000222040
+#      - TREZ_PATTERN_ID=74942939-a82c-4872-a45e-9fbd1a37cdb5
+#      # Google API (for google-generativeai)
+##      - GOOGLE_API_KEY=your-google-api-key
+#    depends_on:
+#      - db
+#      - redis
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+#      interval: 30s
+#      timeout: 3s
+#      retries: 3
+##  db:
+##    image: postgres:15
+##    environment:
+##      - POSTGRES_DB=ala
+##      - POSTGRES_USER=postgres
+##      - POSTGRES_PASSWORD=your-db-password
+##    volumes:
+##      - postgres_data:/var/lib/postgresql/data
+##    healthcheck:
+##      test: ["CMD-SHELL", "pg_isready -U postgres"]
+##      interval: 10s
+##      timeout: 5s
+##      retries: 5
+##  redis:
+##    image: redis:7
+##    volumes:
+##      - redis_data:/data
+##    healthcheck:
+##      test: ["CMD", "redis-cli", "ping"]
+##      interval: 10s
+##      timeout: 3s
+##      retries: 5
+##volumes:
+##  postgres_data:
+##  redis_data:
+
+
+version: '3.8'
+services:
+  web:
+    image: django-roya:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Django Core Settings
+      - SECRET_KEY=x8yZ9kWvN2mPqRtX7cL3jF5hG4dS0aB1eU6iO2nT8rY9wM4vQ3z
+      - DEBUG=False
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      - DJANGO_LOG_LEVEL=True
+      # PostgreSQL Database (local)
+      - DB_NAME=RoyaMoon
+      - DB_USER=Ala
+      - DB_PASSWORD=aehieK0ia0Ood=ai
+      - DB_HOST=37.32.26.49
+      - DB_PORT=5454
+      # Redis Cache (local)
+      - REDIS_HOST=host.docker.internal
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+      # SMS API (for OTP sending)
+      - SMS_API_URL=http://sms.ala.org.ir/SMSInOutBox/SendSms
+      - SMS_API_USERNAME=macsa
+      - SMS_API_PASSWORD=your-sms-api-password
+      - SMS_API_FROM_NUMBER=10000110110142
+      # Trez SMS Service
+      - TREZ_ACCESS_HASH=55121220-aec6-4f73-947c-dd62eecea9e9
+      - TREZ_SENDER_NUMBER=5000222040
+      - TREZ_PATTERN_ID=74942939-a82c-4872-a45e-9fbd1a37cdb5
+      # Google API (for google-generativeai)
+      - GOOGLE_API_KEY=your-google-api-key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3

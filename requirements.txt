@@ -27,6 +27,8 @@ PyMuPDF>=1.23.0  # use proper name for fitz binding
 #sqlparse==0.5.3
 #typing_extensions==4.13.2
 
+faiss-cpu>=1.8.0
+PyMuPDF==1.26.0
 annotated-types==0.7.0
 anyio==4.9.0
 asgiref==3.8.1
@@ -42,7 +44,6 @@ djangorestframework_simplejwt==5.5.0
 drf-spectacular==0.28.0
 drf-yasg==1.21.10
 exceptiongroup==1.2.2
-faiss-cpu==1.11.0
 filelock==3.13.1
 fsspec==2024.6.1
 google-ai-generativelanguage==0.6.15
@@ -79,7 +80,6 @@ pyasn1_modules==0.4.2
 pydantic==2.11.4
 pydantic_core==2.33.2
 PyJWT==2.9.0
-PyMuPDF==1.25.5
 pyparsing==3.2.3
 python-dotenv==1.1.0
 pytz==2025.2
@@ -109,3 +109,4 @@ typing_extensions==4.13.2
 uritemplate==4.1.1
 urllib3==2.4.0
 urllib3-secure-extra==0.1.0
+gunicorn==23.0.0

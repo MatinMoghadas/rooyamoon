@@ -442,11 +442,12 @@ class CardViewSet(viewsets.ModelViewSet):
                 gemini_handler = GeminiChatWishAPIView()
                 user_message = card_data.get("content")
                 challenge = request.data.get("challenge") or "چالش ۱"
-                result = asyncio.run(gemini_handler.handle_rag_chat(user_message, challenge))
+                result = asyncio.run(gemini_handler.handle_rag_chat(user_message, card_data['id'], challenge))
                 gemini_response = result.get("response", "")
+                # bot_user = User.objects.get(username="بات تحلیل گر آرزو")
 
-                bot_user = User.objects.get(username="بات تحلیل گر آرزو")
-                # 👇 Automatically create a comment with Gemini's response
+                bot_user = User.objects.get(username="بات تحلیلگر آرزو")
+
                 Comment.objects.create(
                     card=card_instance,
                     creator=bot_user,
@@ -717,10 +718,15 @@ class CommentViewSet(viewsets.ModelViewSet):
 
             mentions = serializer.data.get("mentions")
             # Check if the bot is mentioned
-            if "بات تحلیل گر آرزو" in mentions:
+            # if "بات تحلیل گر آرزو" in mentions:
+            #     try:
+            #         User = get_user_model()
+            #         bot_user = User.objects.get(username="بات تحلیل گر آرزو") LOCAL VERSION
+            if "بات تحلیلگر آرزو" in mentions:
                 try:
                     User = get_user_model()
-                    bot_user = User.objects.get(username="بات تحلیل گر آرزو")
+                    bot_user = User.objects.get(username="بات تحلیلگر آرزو")
+
                 except User.DoesNotExist:
                     bot_user = None
 
@@ -732,7 +738,7 @@ class CommentViewSet(viewsets.ModelViewSet):
 
                         gemini_handler = GeminiChatWishAPIView()
                         gemini_response = asyncio.run(
-                            gemini_handler.handle_rag_chat(user_message, challenge)
+                            gemini_handler.handle_rag_chat(user_message, card.id, challenge)
                         ).get("response", "")
 
                         # Create the bot's comment in response
@@ -1232,7 +1238,8 @@ class UpdateCommentView(APIView):
             # Gemini AI bot handling
             try:
                 User = get_user_model()
-                bot_user = User.objects.get(username="بات تحلیل گر آرزو")
+                # bot_user = User.objects.get(username="بات تحلیل گر آرزو") local version
+                bot_user = User.objects.get(username="بات تحلیلگر آرزو")
             except User.DoesNotExist:
                 bot_user = None
 
@@ -1243,7 +1250,7 @@ class UpdateCommentView(APIView):
 
                     gemini_handler = GeminiChatWishAPIView()
                     gemini_response = asyncio.run(
-                        gemini_handler.handle_rag_chat(user_message, challenge)
+                        gemini_handler.handle_rag_chat(user_message, comment.card.id, challenge)
                     ).get("response", "")
 
                     Comment.objects.create(
@@ -2674,10 +2681,10 @@ class GeminiChatWishAPIView(APIView):
                 "messages": f"خطا: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    async def handle_rag_chat(self, user_input, challange):
+    async def handle_rag_chat(self, user_input, chat_id, challange):
         # challenges = await rag.generate_challenges(query=user_input)
         # chosen_challenge = challenges[0]
-        response = await rag.ask_question(query=user_input, challange=challange)
+        response = await rag.ask_question(query=user_input, chat_id=chat_id, challange=challange)
         # return {"challenges": challenges, "response": response}
         return {"response": response}
 

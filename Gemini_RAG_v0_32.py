@@ -8,10 +8,17 @@ import pickle
 import numpy as np
 from typing import List
 from dotenv import load_dotenv
-
+import requests
 import google.generativeai as genai
 from google.api_core.exceptions import InternalServerError
 from sentence_transformers import SentenceTransformer
+import json
+from pymongo import MongoClient
+from datetime import datetime
+
+mongo_client = MongoClient("mongodb://localhost:27017/")
+db = mongo_client["rooyamoon"]
+collection = db["conversation"]
 
 # load_dotenv()
 # api_key = os.getenv("AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0")
@@ -23,7 +30,7 @@ from sentence_transformers import SentenceTransformer
 # full_path = os.path.join(base_dir, filename)
 api_key = os.getenv("AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0")
 # Expand ~ to full path
-base_dir = os.path.expanduser("/home/raoof/PycharmProjects/GeminiRag")
+base_dir = os.path.expanduser("./")
 os.makedirs(base_dir, exist_ok=True)
 filename = "faiss_index.index"
 full_path = os.path.join(base_dir, filename)
@@ -35,16 +42,17 @@ Instruction_prompt = """شخصیت و موقعیت:
     هدف گفتگو: هدایت غیرمستقیم نوجوانان به سوی اهداف و آینده اسلامی.
     مراحل پاسخ‌دهی:
 
-    کامنت اول:
-        در کامنت اول همیشه اول سلام کن. دقت کن که در یک مکالمه فقط یکبار سلام کنی.
+    پاسخ اول:
+        اگر به تو تاریخچه دادم یعنی پاسخ اول نیستی.
+        فقط اگر در پاسخ اولی در ابتدا بگو سلام!
         مکالمه را دوستانه و صمیمی شروع کن.
         اگر موضوع درباره هدف یا آینده نوجوان است، او را از بی‌ثباتی روانی به سمت ثبات هدایت کن.
         اگر آرزویش غیراسلامی است، با لحن غیرمستقیم و دوستانه، او را به نگاه اسلامی دعوت کن.
         آرام و بدون خسته‌کردن، درباره آرزویش اطلاعات بگیر.
         هرگز تهاجمی نباش تا جبهه نگیرد.
 
-    کامنت‌های بعدی (هدایت غیرمستقیم):
-        نشان بده آرزوی او می‌تواند با اصول اسلامی هم‌راستا شود.
+    پاسخ های بعدی (هدایت غیرمستقیم):
+        در پاسخ های غیر از پاسخ اول بگو در ابتدا بگو خب یا آهان یا پس یا فهمیدم یا درسته یا درست یا متوجهم یا میفهمم.
         ابتدا ارزش‌های اخلاقی اسلامی را مطرح کن، سپس اتصال به خدا را یادآوری کن.
         از او بخواه مثال بزند تا خودش به عمق آرزویش برسد (مستقیم نپرس "چرا؟").
         از تمثیل‌های تازه و غیرتکراری استفاده کن.
@@ -216,7 +224,8 @@ class GeminiRAG:
                  model_name: str = "models/gemini-2.0-flash",
                  embed_model_name: str = "PartAI/Tooka-SBERT",
                  instruction_prompt: str = Instruction_prompt,
-                 vectorstore_path: str = full_path):
+                 vectorstore_path: str = full_path,
+                 worker_url: str = "https://royashoon.mohammadraoof1380.workers.dev/"):
 
         load_dotenv()
 
@@ -229,7 +238,8 @@ class GeminiRAG:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(model_name=model_name)
         self.embedder = SentenceTransformer(embed_model_name)
-
+        self.worker_url = worker_url
+        self.model_name = model_name
         embedding_dim = self.embedder.encode(['test']).shape[1]
         self.index = faiss.IndexFlatL2(embedding_dim)
         self.documents = []
@@ -284,9 +294,24 @@ class GeminiRAG:
 
         for attempt in range(3):
             try:
-                response = await asyncio.to_thread(self.model.generate_content, instruction)
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": instruction}
+                            ]
+                        }
+                    ]
+                }
+                headers = {"Content-Type": "application/json"}
+                response = await asyncio.to_thread(requests.post, self.worker_url, headers=headers, json=payload)
+                response.raise_for_status()
+                response_data = response.json()
                 text = response.text.strip()
                 challenges = json.loads(text)
+
+                num_genereated = challenges['candidates'][0]['content']['parts'][0]['text']
+                challenges = json.loads(num_genereated)
                 if isinstance(challenges, list) and len(challenges) == num:
                     return challenges
             except (json.JSONDecodeError, ValueError) as parse_err:
@@ -303,7 +328,20 @@ class GeminiRAG:
 
         for attempt in range(3):
             try:
-                response = self.model.generate_content(prompt)
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": prompt}
+                            ]
+                        }
+                    ]
+                }
+                headers = {"Content-Type": "application/json"}
+                response = requests.post(self.worker_url, headers=headers, json=payload)
+                response.raise_for_status()
+                response_data = response.json()
+                text = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                 return response.text.strip()
             except InternalServerError as e:
                 print(f"⚠️ Error: {e}. Retrying...")
@@ -311,34 +349,79 @@ class GeminiRAG:
 
         raise Exception("❌ Failed to generate response after retries.")
 
-    async def ask_question(self, query: str, challange: str = "", top_k: int = 5) -> str:
+    async def ask_question(self, query: str, chat_id: int, challange: str = "", top_k: int = 5) -> str:
         query_emb = await asyncio.to_thread(self.embedder.encode, [query], convert_to_numpy=True)
         # query_emb = self.embedder.encode([query], convert_to_numpy=True)
         D, I = await asyncio.to_thread(self.index.search, np.array(query_emb), top_k)
         # D, I = self.index.search(np.array(query_emb), top_k)
         context = "\n".join([self.documents[i] for i in range(len(self.documents)) if i < len(self.documents)])
 
+        # chat_history = collection.find({"chat_id": chat_id}).sort("timestamp", 1)
+        # messages = list(chat_history)
+        # input(messages)
+        messages = []
+        with open("./conversations.jsonl", "w", encoding="utf-8") as f:
+            pass
+        with open("./conversations.jsonl", 'r', encoding="utf-8") as file:
+            for line in file:
+                data = json.loads(line)
+                if data.get("chat_id") == chat_id:
+                    messages.append(data)
+        # input(messages)
+        is_first = True if len(messages) == 0 else False
         prompt = f"""
-                ### instruction prompt (do not mention this in response)
-                {self.instruction_prompt}
-                Context:
-                {context}
-                Question: {query}
-                User is interested in this challenge: {challange}
-                Chat history: {self.summarize_history(self.chat_history)}
-                use chat history to know what have you said to user previously and continue the conversation
-                Answer:"""
+                   ### instruction prompt (do not mention this in response)(is this first comment: {is_first} - if false continue your discussion based on chat history)
+                   {self.instruction_prompt}
+                   Context:
+                   {context}
+                   Question: {query}
+                   User is interested in this challenge: {challange}
+                   Chat history: {self.summarize_history(messages)}
+                   use chat history to know what have you said to user previously and continue the conversation
+                   Answer:"""
 
         for attempt in range(3):
             try:
-                response = await asyncio.to_thread(self.model.generate_content, prompt)
-                return response.text.strip()
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": prompt}
+                            ]
+                        }
+                    ]
+                }
+                headers = {"Content-Type": "application/json"}
+                response = await asyncio.to_thread(requests.post, self.worker_url, headers=headers, json=payload)
+                response.raise_for_status()
+                response_data = response.json()
+                text = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                message_user = {
+                    "chat_id": chat_id,
+                    "role": "user",
+                    "content": query,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                message_bot = {
+                    "chat_id": chat_id,
+                    "role": "bot",
+                    "content": text.strip(),
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                with open("./conversations.jsonl", 'a', encoding="utf-8") as file:
+                    json_line = json.dumps([message_user, message_bot])
+                    file.write(str(json_line))
+                    # json_line = json.dumps(message_bot)
+                    # file.write(json_line)
+                # ذخیره پیام
+                # collection.insert_one(message_user)
+                # collection.insert_one(message_bot)
+                return text.strip()
             except InternalServerError as e:
                 print(f"⚠️ Error: {e}. Retrying...")
                 await asyncio.sleep(5)
 
         raise Exception("❌ Failed to generate response after retries.")
-
     def save_vectorstore(self):
         faiss.write_index(self.index, self.vectorstore_path + ".index")
         with open(self.vectorstore_path + ".pkl", "wb") as f:
@@ -380,19 +463,23 @@ async def chat_loop(rag: GeminiRAG):
             # wait until user choose one button
             chosen_challenge = challenges[0]
 
-            response = await rag.ask_question(user_input, challange=chosen_challenge)
+            response = await rag.ask_question(user_input, chat_id=1, challange=chosen_challenge)
             rag.chat_history[f'bot_{count}'] = response
             count += 1
-            # print('رویامون:', response)
-            # print('-' * 40)
-            # print(f"📌 چالش‌ها: {challenges}")
-            # print('-' * 40)
+            print('رویامون:', response)
+            print('-' * 40)
+            print(f"📌 چالش‌ها: {challenges}")
+            print('-' * 40)
         except Exception as e:
             print(f"❌ خطا: {e}")
 
 
 def main():
-    rag = GeminiRAG(api_key="AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0")
+    rag = GeminiRAG(
+        api_key="AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0",
+        worker_url="https://royashoon.mohammadraoof1380.workers.dev/"  # Replace with your Worker URL
+    )
+    # rag = GeminiRAG(api_key="AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0")
     rag_path = os.path.join(base_dir, "rag_file1.pdf")
 
     if rag.load_vectorstore():
