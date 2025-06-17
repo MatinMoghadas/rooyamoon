@@ -1,8 +1,7 @@
 from rest_framework import serializers
 from .models import (User, Card, Notification, Comment,
-    #CommentReply,
                      SavedCard, CommentLike,
-    #CommentReplyLike
+    # CommentReply, CommentReplyLike
                      )
 from .utils import get_display_username, extract_mentions
 

@@ -14,11 +14,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from . import serializers
 from .models import User, Card, Notification, Comment, SavedCard, CommentLike  # CommentReply, CommentReplyLike,
 from .serializers import (
-    OTPLoginSerializer, UserSerializer, UserRegistrationSerializer,
-    CardSerializer, NotificationSerializer, LoginSerializer, CommentSerializer,
-    SavedCardSerializer, MentionUserSerializer, CommentWithRepliesCreatorSerializer,
-    FlatCommentWithMetaSerializer, CardDetailSerializer, CommentCreatorIdSerializer, UserProfileImageUpdateSerializer
+    OTPLoginSerializer, UserSerializer,CardSerializer,
+    NotificationSerializer, LoginSerializer, CommentSerializer,
+    SavedCardSerializer, MentionUserSerializer, FlatCommentWithMetaSerializer,
+    CardDetailSerializer, CommentCreatorIdSerializer, UserProfileImageUpdateSerializer
     # CommentWithRepliesCreatorSerializer, CommentReplySerializer, CommentWithRepliesSerializer,
+    #CommentWithRepliesCreatorSerializer,  UserRegistrationSerializer
 )
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
