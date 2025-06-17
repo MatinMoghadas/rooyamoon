@@ -6,8 +6,9 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 import redis
+from django.utils import timezone
 from requests.auth import HTTPBasicAuth
-
+from django.contrib.auth import get_user_model
 from .models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -98,3 +99,26 @@ def extract_mentions(content):
     # Look for users matching any of the extracted usernames (case-insensitive)
     users = User.objects.filter(username__in=usernames)
     return users
+
+
+def ensure_bot_user():
+    """
+    Ensures that a bot user with the name 'بات تحلیلگر آرزو' exists.
+    Creates one if it doesn't.
+    Returns the User instance.
+    """
+    bot_username = "بات تحلیلگر آرزو"
+
+    bot_user, created = User.objects.get_or_create(
+        username=bot_username,
+        defaults={
+            "mobile_phone_number": None,
+            "Full_name": bot_username,
+            "bio": "من یک ربات تحلیل‌گر هستم که توسط هوش مصنوعی تغذیه می‌شوم.",
+            "is_bot": True,
+            "created_at": timezone.now(),
+            "is_active": True,
+            "which_social_media": "site",
+        }
+    )
+    return bot_user

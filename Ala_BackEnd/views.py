@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from Gemini_RAG_v0_32 import GeminiRAG
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import GenericAPIView
+from rest_framework.generics import GenericAPIView, ListAPIView
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets, permissions
@@ -17,13 +17,13 @@ from .serializers import (
     OTPLoginSerializer, UserSerializer, UserRegistrationSerializer,
     CardSerializer, NotificationSerializer, LoginSerializer, CommentSerializer,
     SavedCardSerializer, MentionUserSerializer, CommentWithRepliesCreatorSerializer,
-    FlatCommentWithMetaSerializer, CardDetailSerializer
+    FlatCommentWithMetaSerializer, CardDetailSerializer, CommentCreatorIdSerializer, UserProfileImageUpdateSerializer
     # CommentWithRepliesCreatorSerializer, CommentReplySerializer, CommentWithRepliesSerializer,
 )
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
 from .utils import generate_otp, verify_otp, get_or_create_user, generate_tokens_for_user, extract_mentions, \
-    send_otp_sms
+    send_otp_sms, ensure_bot_user
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import logging
@@ -356,7 +356,7 @@ class CardViewSet(viewsets.ModelViewSet):
 
         # Get page number and page size
         page_number = int(request.query_params.get('page', 1))
-        per_page = int(request.query_params.get('perPage', self.pagination_class.page_size))
+        per_page = int(request.query_params.get('page_size', self.pagination_class.page_size))
 
         # Calculate the custom slice: from 0 to (page_number * per_page)
         end_index = page_number * per_page
@@ -444,9 +444,9 @@ class CardViewSet(viewsets.ModelViewSet):
                 challenge = request.data.get("challenge") or "چالش ۱"
                 result = asyncio.run(gemini_handler.handle_rag_chat(user_message, card_data['id'], challenge))
                 gemini_response = result.get("response", "")
-                # bot_user = User.objects.get(username="بات تحلیل گر آرزو")
+                bot_user = User.objects.get(username="بات تحلیل گر آرزو")
 
-                bot_user = User.objects.get(username="بات تحلیلگر آرزو")
+                # bot_user = User.objects.get(username="بات تحلیلگر آرزو")
 
                 Comment.objects.create(
                     card=card_instance,
@@ -715,41 +715,29 @@ class CommentViewSet(viewsets.ModelViewSet):
 
             content = serializer.validated_data.get("content", "")
             card = comment.card
+            mentions = serializer.data.get("mentions", [])
 
-            mentions = serializer.data.get("mentions")
             # Check if the bot is mentioned
-            # if "بات تحلیل گر آرزو" in mentions:
-            #     try:
-            #         User = get_user_model()
-            #         bot_user = User.objects.get(username="بات تحلیل گر آرزو") LOCAL VERSION
-            if "بات تحلیلگر آرزو" in mentions:
+            if "بات تحلیل گر آرزو" in mentions or "بات تحلیلگر آرزو" in mentions:
+                bot_user = ensure_bot_user()
                 try:
-                    User = get_user_model()
-                    bot_user = User.objects.get(username="بات تحلیلگر آرزو")
+                    user_message = comment.content
+                    challenge = request.data.get("challenge") or "چالش ۱"
 
-                except User.DoesNotExist:
-                    bot_user = None
+                    gemini_handler = GeminiChatWishAPIView()
+                    gemini_response = asyncio.run(
+                        gemini_handler.handle_rag_chat(user_message, card.id, challenge)
+                    ).get("response", "")
 
-                if bot_user:
-                    try:
-                        # Generate AI response using card content or comment
-                        user_message = comment.content
-                        challenge = request.data.get("challenge") or "چالش ۱"
-
-                        gemini_handler = GeminiChatWishAPIView()
-                        gemini_response = asyncio.run(
-                            gemini_handler.handle_rag_chat(user_message, card.id, challenge)
-                        ).get("response", "")
-
-                        # Create the bot's comment in response
-                        Comment.objects.create(
-                            card=card,
-                            creator=bot_user,
-                            content=gemini_response,
-                            parent=comment  # 👈 Set the parent here
-                        )
-                    except Exception as e:
-                        print(f"Gemini Error: {e}")  # Optionally log
+                    # Create the bot's comment in response
+                    Comment.objects.create(
+                        card=card,
+                        creator=bot_user,
+                        content=gemini_response,
+                        parent=comment
+                    )
+                except Exception as e:
+                    print(f"Gemini Error: {e}")  # Log AI failure
 
             return Response({
                 "statusCode": 200,
@@ -1060,9 +1048,12 @@ class CardCommentsRepliesAPIView(APIView):
 
         all_comments = Comment.objects.filter(card=card).order_by('created_at')
 
-        comment_serializer = FlatCommentWithMetaSerializer(all_comments, many=True, context={'request': request})
+        comment_serializer = FlatCommentWithMetaSerializer(
+            all_comments,
+            many=True,
+            context={'request': request, 'card': card}
+        )
         card_serializer = CardDetailSerializer(card, context={'request': request})
-
 
         return Response({
             "statusCode": 200,
@@ -1238,8 +1229,8 @@ class UpdateCommentView(APIView):
             # Gemini AI bot handling
             try:
                 User = get_user_model()
-                # bot_user = User.objects.get(username="بات تحلیل گر آرزو") local version
-                bot_user = User.objects.get(username="بات تحلیلگر آرزو")
+                bot_user = User.objects.get(username="بات تحلیل گر آرزو")  #local version
+                # bot_user = User.objects.get(username="بات تحلیلگر آرزو")
             except User.DoesNotExist:
                 bot_user = None
 
@@ -2525,6 +2516,251 @@ class MentionUserListAPIView(APIView):
             "messages": ["Mentionable users fetched successfully"],
             "result": serialized_users
         }, status=status.HTTP_200_OK)
+
+
+class CardCommentCreatorsAPIView(ListAPIView):
+    serializer_class = CommentCreatorIdSerializer
+    permission_classes = []
+
+    def get_queryset(self):
+        card_id = self.kwargs.get('card_id')
+        card = get_object_or_404(Card, id=card_id)
+        return Comment.objects.filter(card=card).order_by('created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        total_comments_count = queryset.count()
+
+        # Get page number and perPage from query params
+        page_number = int(request.query_params.get('page', 1))
+        per_page = int(request.query_params.get('perPage', 20))  # default perPage to 20
+
+        # Custom progressive pagination
+        end_index = page_number * per_page
+        paged_queryset = queryset[:end_index]
+
+        serializer = self.get_serializer(paged_queryset, many=True, context={'request': request})
+
+        return Response({
+            "statusCode": 200,
+            "messages": ["Comment creators retrieved successfully."],
+            "total": total_comments_count,
+            "page": page_number,
+            "perPage": per_page,
+            "result": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class UserCreatedCardsAPIView(ListAPIView):
+    serializer_class = CardDetailSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = CustomPagination
+
+    def get_queryset(self):
+        return Card.objects.filter(creator=self.request.user).order_by('-created_at')
+
+    @extend_schema(
+        summary="Get user-created cards",
+        description="Retrieve all cards created by the authenticated user, with progressive pagination.",
+        parameters=[
+            OpenApiParameter(
+                name='page',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description='Page number (starts from 1)'
+            ),
+            OpenApiParameter(
+                name='perPage',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description='Number of items per page (default: 20)'
+            )
+        ],
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 200},
+                    "messages": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["User's created cards retrieved successfully."]
+                    },
+                    "total": {"type": "integer", "example": 42},
+                    "page": {"type": "integer", "example": 1},
+                    "perPage": {"type": "integer", "example": 20},
+                    "result": {
+                        "type": "array",
+                        "items": {"type": "object"}  # Placeholder — your CardDetailSerializer result
+                    }
+                }
+            }
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        total_cards_count = queryset.count()
+
+        # Get page number and perPage from query params, with defaults
+        page_number = int(request.query_params.get('page', 1))
+        per_page = int(request.query_params.get('page_size', self.pagination_class.page_size))
+
+        # Custom progressive pagination
+        end_index = page_number * per_page
+        paged_queryset = queryset[:end_index]
+
+        serializer = self.get_serializer(paged_queryset, many=True, context={'request': request})
+
+        return Response({
+            "statusCode": 200,
+            "messages": ["User's created cards retrieved successfully."],
+            "total": total_cards_count,
+            "page": page_number,
+            "perPage": per_page,
+            "result": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class UserSavedCardsAPIView(ListAPIView):
+    serializer_class = CardDetailSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = CustomPagination
+
+    def get_queryset(self):
+        # Return Card queryset that the user saved
+        saved_cards = SavedCard.objects.filter(user=self.request.user).select_related('card')
+        card_ids = saved_cards.values_list('card__id', flat=True)
+        return Card.objects.filter(id__in=card_ids).order_by('-created_at')
+
+    @extend_schema(
+        summary="Get user-saved cards",
+        description="Retrieve all cards saved by the authenticated user, with progressive pagination.",
+        parameters=[
+            OpenApiParameter(
+                name='page',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description='Page number (starts from 1)'
+            ),
+            OpenApiParameter(
+                name='perPage',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description='Number of items per page (default: 20)'
+            )
+        ],
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 200},
+                    "messages": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["User's saved cards retrieved successfully."]
+                    },
+                    "total": {"type": "integer", "example": 42},
+                    "page": {"type": "integer", "example": 1},
+                    "perPage": {"type": "integer", "example": 20},
+                    "result": {
+                        "type": "array",
+                        "items": {"type": "object"}  # Placeholder — your CardDetailSerializer result
+                    }
+                }
+            }
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        total_cards_count = queryset.count()
+
+        # Get page and perPage
+        page_number = int(request.query_params.get('page', 1))
+        per_page = int(request.query_params.get('page_size', self.pagination_class.page_size))
+
+        # Progressive pagination
+        end_index = page_number * per_page
+        paged_queryset = queryset[:end_index]
+
+        serializer = self.get_serializer(paged_queryset, many=True, context={'request': request})
+
+        return Response({
+            "statusCode": 200,
+            "messages": ["User's saved cards retrieved successfully."],
+            "total": total_cards_count,
+            "page": page_number,
+            "perPage": per_page,
+            "result": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class UserProfileImageUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Update user's profile image",
+        description="Update the `profile_image_path` of the authenticated user.",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "profile_image_path": {"type": "string", "example": "/media/profile_images/my_new_image.jpg"}
+                },
+                "required": ["profile_image_path"]
+            }
+        },
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 200},
+                    "messages": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["Profile image updated successfully."]
+                    },
+                    "result": {
+                        "type": "object",
+                        "properties": {
+                            "profile_image_path": {"type": "string",
+                                                   "example": "/media/profile_images/my_new_image.jpg"}
+                        }
+                    }
+                }
+            },
+            400: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 400},
+                    "messages": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["Invalid data."]
+                    },
+                    "errors": {"type": "object"}
+                }
+            }
+        }
+    )
+    def put(self, request, *args, **kwargs):
+        user = request.user
+        serializer = UserProfileImageUpdateSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "statusCode": 200,
+                "messages": ["Profile image updated successfully."],
+                "result": serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "statusCode": 400,
+            "messages": ["Invalid data."],
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class GeminiChatChallengeAPIView(APIView):

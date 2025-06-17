@@ -8,7 +8,9 @@ from .views import (
     SavedCardDeleteAPIView, CommentLikeView,
     CommentUnlikeView, UpdateCommentView,
     MentionUserListAPIView, CardCommentsRepliesAPIView,
-    GeminiChatChallengeAPIView, GeminiChatWishAPIView
+    GeminiChatChallengeAPIView, GeminiChatWishAPIView,
+    CardCommentCreatorsAPIView, UserCreatedCardsAPIView,
+    UserSavedCardsAPIView, UserProfileImageUpdateAPIView
     # CommentReplyViewSet, CardCommentsRepliesAPIView, CommentReplyUpdateViewSet,
     # CommentReplyLikeView, ReplyUnlikeView,
 )
@@ -37,12 +39,16 @@ urlpatterns = [
     path("auth/login/", OTPLoginView.as_view(), name="otp-login"),
     path("auth/verify/", OTPVerificationView.as_view(), name="otp-verify"),
     path("user/profile/", UserProfileView.as_view(), name="user-profile"),
+    path('user/me/cards/', UserCreatedCardsAPIView.as_view(), name='user-created-cards'),
+    path('user/me/saved-cards/', UserSavedCardsAPIView.as_view(), name='user-saved-cards'),
+    path('user/me/profile-image/', UserProfileImageUpdateAPIView.as_view(), name='user-profile-image-update'),
     path('api/', include(router.urls)),
     path("notifications/", NotificationView.as_view(), name="notifications"),
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path('api/cards/<int:card_id>/comment-creators/', CardCommentCreatorsAPIView.as_view(), name='card-comment-creators'),
     path('api/cards/<int:card_id>/comments/', CardCommentsRepliesAPIView.as_view(),
          name='card-comments-replies'),
 

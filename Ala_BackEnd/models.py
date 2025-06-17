@@ -8,7 +8,7 @@ class User(AbstractUser):
     Full_name = models.CharField(max_length=255, null=True, blank=True)
     bio = models.TextField(null=True, blank=True)
     profile_image_path = models.CharField(max_length=255, null=True, blank=True)
-    # is_bot = models.BooleanField(default=False)
+    is_bot = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)

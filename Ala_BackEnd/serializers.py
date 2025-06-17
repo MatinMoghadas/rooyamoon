@@ -73,7 +73,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['mobile_phone_number', 'username', 'full_name', 'bio']
+        fields = ['mobile_phone_number', 'username', 'full_name', 'bio', 'is_bot']
 
     def validate_mobile_phone_number(self, value):
         user = self.instance
@@ -195,22 +195,42 @@ class CommentWithRepliesCreatorSerializer(serializers.ModelSerializer):
         return CommentWithRepliesCreatorSerializer(children, many=True, context=self.context).data
 
 
+class CommentCreatorIdSerializer(serializers.ModelSerializer):
+    creatorId = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = ['id', 'creatorId']
+
+    def get_creatorId(self, obj):
+        return obj.creator.id if obj.creator else None
+
+
 class FlatCommentWithMetaSerializer(serializers.ModelSerializer):
     creator = serializers.SerializerMethodField()
+    creatorId = serializers.SerializerMethodField()
     mentionedUserIds = serializers.SerializerMethodField()
     parentId = serializers.SerializerMethodField()
     createdAt = serializers.SerializerMethodField()
     type = serializers.SerializerMethodField()
-    liked = serializers.SerializerMethodField()  # <-- New field
+    liked = serializers.SerializerMethodField()
+    card_creator = serializers.SerializerMethodField()
+    is_bot = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
-        fields = '__all__'  # or list explicitly, and include 'liked'
+        fields = '__all__'
 
     def get_creator(self, obj):
         if obj.creator and obj.creator.username:
             return obj.creator.username
         return f"u{obj.creator.id}"
+
+    def get_creatorId(self, obj):
+        return obj.creator.id if obj.creator else None
+
+    def get_is_bot(self, obj):
+        return obj.creator.is_bot if obj.creator else False
 
     def get_mentionedUserIds(self, obj):
         return [
@@ -231,6 +251,12 @@ class FlatCommentWithMetaSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and request.user and request.user.is_authenticated:
             return CommentLike.objects.filter(comment=obj, user=request.user).exists()
+        return False
+
+    def get_card_creator(self, obj):
+        card = self.context.get('card')
+        if card and obj.creator:
+            return obj.creator.id == card.creator.id
         return False
 
 
@@ -390,10 +416,16 @@ class MentionUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'display_username', 'profile_image_path']
+        fields = ['id', 'display_username', 'profile_image_path', 'is_bot']
 
     def get_display_username(self, obj):
         return get_display_username(obj)
+
+
+class UserProfileImageUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['profile_image_path']
 
 
 class NotificationSerializer(serializers.ModelSerializer):
