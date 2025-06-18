@@ -3,6 +3,7 @@ from django.core.cache import cache
 from django.db import DatabaseError, IntegrityError
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
+from rest_framework.parsers import MultiPartParser
 from Gemini_RAG_v0_32 import GeminiRAG
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView, ListAPIView
@@ -23,8 +24,9 @@ from .serializers import (
 )
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
-from .utils import generate_otp, verify_otp, get_or_create_user, generate_tokens_for_user, extract_mentions, \
-    send_otp_sms, ensure_bot_user
+from .utils import (generate_otp, verify_otp, get_or_create_user, generate_tokens_for_user,
+                    extract_mentions, send_otp_sms, ensure_bot_user, upload_image_to_minio
+                    )
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import logging
@@ -116,7 +118,7 @@ class OTPLoginView(APIView):
                 "username": user.username if user.username else "N/A",
                 "Full_name": user.Full_name if user.Full_name else "N/A",
                 "dataGathering": True,
-                # "test": f"OTP: {otp}"
+                "test": f"OTP: {otp}"
             }
         }, status=status.HTTP_200_OK)
 
@@ -445,9 +447,9 @@ class CardViewSet(viewsets.ModelViewSet):
                 challenge = request.data.get("challenge") or "چالش ۱"
                 result = asyncio.run(gemini_handler.handle_rag_chat(user_message, card_data['id'], challenge))
                 gemini_response = result.get("response", "")
-                bot_user = User.objects.get(username="بات تحلیل گر آرزو")
+                # bot_user = User.objects.get(username="بات تحلیل گر آرزو")
 
-                # bot_user = User.objects.get(username="بات تحلیلگر آرزو")
+                bot_user = User.objects.get(username="بات تحلیلگر آرزو")
 
                 Comment.objects.create(
                     card=card_instance,
@@ -1230,8 +1232,8 @@ class UpdateCommentView(APIView):
             # Gemini AI bot handling
             try:
                 User = get_user_model()
-                bot_user = User.objects.get(username="بات تحلیل گر آرزو")  #local version
-                # bot_user = User.objects.get(username="بات تحلیلگر آرزو")
+                # bot_user = User.objects.get(username="بات تحلیل گر آرزو")  #local version
+                bot_user = User.objects.get(username="بات تحلیلگر آرزو")
             except User.DoesNotExist:
                 bot_user = None
 
@@ -2701,55 +2703,43 @@ class UserSavedCardsAPIView(ListAPIView):
 
 class UserProfileImageUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser]
 
     @extend_schema(
         summary="Update user's profile image",
-        description="Update the `profile_image_path` of the authenticated user.",
+        description="Update the `profile_image_path` of the authenticated user by uploading image to MinIO.",
         request={
-            "application/json": {
+            "multipart/form-data": {
                 "type": "object",
                 "properties": {
-                    "profile_image_path": {"type": "string", "example": "/media/profile_images/my_new_image.jpg"}
+                    "profile_image": {"type": "string", "format": "binary"}
                 },
-                "required": ["profile_image_path"]
+                "required": ["profile_image"]
             }
         },
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 200},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Profile image updated successfully."]
-                    },
-                    "result": {
-                        "type": "object",
-                        "properties": {
-                            "profile_image_path": {"type": "string",
-                                                   "example": "/media/profile_images/my_new_image.jpg"}
-                        }
-                    }
-                }
-            },
-            400: {
-                "type": "object",
-                "properties": {
-                    "statusCode": {"type": "integer", "example": 400},
-                    "messages": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "example": ["Invalid data."]
-                    },
-                    "errors": {"type": "object"}
-                }
-            }
-        }
+        responses={...}  # Keep your existing response schema
     )
     def put(self, request, *args, **kwargs):
         user = request.user
-        serializer = UserProfileImageUpdateSerializer(user, data=request.data, partial=True)
+        profile_image = request.FILES.get("profile_image")
+
+        if not profile_image:
+            return Response({
+                "statusCode": 400,
+                "messages": ["No image file provided."],
+                "errors": {"profile_image": ["This field is required."]}
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            image_path = upload_image_to_minio(profile_image, profile_image.name)
+        except Exception as e:
+            return Response({
+                "statusCode": 500,
+                "messages": ["Failed to upload image to MinIO."],
+                "errors": {"minio": [str(e)]}
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        serializer = UserProfileImageUpdateSerializer(user, data={"profile_image_path": image_path}, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response({

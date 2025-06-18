@@ -11,6 +11,9 @@ from requests.auth import HTTPBasicAuth
 from django.contrib.auth import get_user_model
 from .models import User
 from rest_framework_simplejwt.tokens import RefreshToken
+import uuid
+from minio import Minio
+
 
 logger = logging.getLogger(__name__)
 
@@ -122,3 +125,33 @@ def ensure_bot_user():
         }
     )
     return bot_user
+
+
+def upload_image_to_minio(file_obj, filename, folder="profile_images"):
+    client = Minio(
+        settings.MINIO_ENDPOINT,
+        access_key=settings.MINIO_ACCESS_KEY,
+        secret_key=settings.MINIO_SECRET_KEY,
+        secure=settings.MINIO_SECURE
+    )
+
+    bucket_name = settings.MINIO_BUCKET_NAME
+
+    # Ensure the bucket exists
+    if not client.bucket_exists(bucket_name):
+        client.make_bucket(bucket_name)
+
+    # Generate a unique object name
+    object_name = f"{folder}/{uuid.uuid4().hex}_{filename}"
+
+    # Upload the file
+    client.put_object(
+        bucket_name,
+        object_name,
+        file_obj,
+        length=file_obj.size,
+        content_type=file_obj.content_type
+    )
+
+    # Return the MinIO file path or URL
+    return f"/{bucket_name}/{object_name}"

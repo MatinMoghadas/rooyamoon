@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'rest_framework.authtoken',
     'Ala_BackEnd.apps.AlaBackendConfig',
+    # 'django_minio_backend.apps.DjangoMinioBackendConfig',
 
 ]
 
@@ -122,6 +123,20 @@ TREZ_ACCESS_HASH = os.getenv("TREZ_ACCESS_HASH", "55121220-aec6-4f73-947c-dd62ee
 TREZ_SENDER_NUMBER = os.getenv("TREZ_SENDER_NUMBER", "5000222040")
 TREZ_PATTERN_ID = os.getenv("TREZ_PATTERN_ID", "74942939-a82c-4872-a45e-9fbd1a37cdb5")
 
+# STORAGES = {
+#     "default": {
+#         "BACKEND": "django_minio_backend.models.MinioBackend",
+#     },
+#     "staticfiles": {
+#         "BACKEND": "django_minio_backend.models.MinioBackendStatic",
+#     },
+# }
+
+MINIO_ENDPOINT = 'localhost:9000'
+MINIO_ACCESS_KEY = 'minioadmin'
+MINIO_SECRET_KEY = 'minioadmin'
+MINIO_BUCKET_NAME = 'roya-moon'
+MINIO_SECURE = False  # Set to True if using HTTPS
 
 
 # Database
