@@ -2830,6 +2830,79 @@ class GeminiChatChallengeAPIView(APIView):
         return {"response": challenges}
 
 
+class GeminiSuggestAPIView(APIView):
+
+    @extend_schema(
+        summary="Gemini AI Suggest Generator",
+        description="دریافت پیشنهاد از مدل Gemini با استفاده از chat_id.",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {
+                        "type": "string",
+                        "example": "1234567890abcdef"
+                    }
+                },
+                "required": ["chat_id"]
+            }
+        },
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 200},
+                    "messages": {"type": "string", "example": "موفق"},
+                    "suggestions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "example": ["پیشنهاد ۱", "پیشنهاد ۲"]
+                    }
+                }
+            },
+            400: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 400},
+                    "messages": {"type": "string", "example": "chat_id is required."}
+                }
+            },
+            500: {
+                "type": "object",
+                "properties": {
+                    "statusCode": {"type": "integer", "example": 500},
+                    "messages": {"type": "string", "example": "خطا: خطای پیش‌بینی نشده"}
+                }
+            }
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        chat_id = request.data.get("chat_id")
+        if not chat_id:
+            return Response({
+                "statusCode": 400,
+                "messages": "message is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = asyncio.run(self.run_suggestion(chat_id))
+            return Response({
+                "statusCode": 200,
+                "messages": "موفق",
+                "suggestions": result["response"],
+            })
+
+        except Exception as e:
+            return Response({
+                "statusCode": 500,
+                "messages": f"خطا: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    async def run_suggestion(self, chat_id):
+        suggestions = await rag.suggest_comment(chat_id=chat_id)
+        return {"response": suggestions}
+
+
 class GeminiChatWishAPIView(APIView):
     @extend_schema(
         summary="Gemini AI Chat",

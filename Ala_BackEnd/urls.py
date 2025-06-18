@@ -10,7 +10,8 @@ from .views import (
     MentionUserListAPIView, CardCommentsRepliesAPIView,
     GeminiChatChallengeAPIView, GeminiChatWishAPIView,
     CardCommentCreatorsAPIView, UserCreatedCardsAPIView,
-    UserSavedCardsAPIView, UserProfileImageUpdateAPIView
+    UserSavedCardsAPIView, UserProfileImageUpdateAPIView,
+    GeminiSuggestAPIView
     # CommentReplyViewSet, CardCommentsRepliesAPIView, CommentReplyUpdateViewSet,
     # CommentReplyLikeView, ReplyUnlikeView,
 )
@@ -36,6 +37,7 @@ urlpatterns = [
     path('api/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     path("api/chat/challenge", GeminiChatChallengeAPIView.as_view(), name="gemini-chat-challenge"),
     path("api/chat/wish", GeminiChatWishAPIView.as_view(), name="gemini-chat-wish"),
+    path('api/gemini/suggest/', GeminiSuggestAPIView.as_view(), name='gemini-suggest'),
     path("auth/login/", OTPLoginView.as_view(), name="otp-login"),
     path("auth/verify/", OTPVerificationView.as_view(), name="otp-verify"),
     path("user/profile/", UserProfileView.as_view(), name="user-profile"),

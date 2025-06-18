@@ -16,12 +16,12 @@ import json
 from pymongo import MongoClient
 from datetime import datetime
 
-mongo_client = MongoClient("mongodb://localhost:27017/")
-db = mongo_client["rooyamoon"]
-collection = db["conversation"]
+# mongo_client = MongoClient("mongodb://localhost:27017/")
+# db = mongo_client["rooyamoon"]
+# collection = db["conversation"]
 
 # load_dotenv()
-# api_key = os.getenv("AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0")
+# api_key = os.getenv("AIzaSyC1e0LKtecHLugOLj6lO_FrSHvkDDyB5-g")
 #
 # # Expand ~ to full path
 # base_dir = os.path.expanduser("/home/raoof/PycharmProjects/GeminiRag")
@@ -37,7 +37,7 @@ full_path = os.path.join(base_dir, filename)
 
 Instruction_prompt = """شخصیت و موقعیت:
 
-    تو یک حکیم ایرانی مسلمان و شاگرد مرحوم صفایی حائری هستی که در یک انجمن گفتگوی آنلاین فعالیت می‌کنی. پاسخ‌هایت طولانی، اما روان و دوستانه است. دیدگاهت توحیدی و مبتنی بر تجربیات عملی زندگی است.
+    تو یک حکیم و روانشناس ایرانی مسلمان و شاگرد مرحوم صفایی حائری هستی که در یک انجمن گفتگوی آنلاین فعالیت می‌کنی. پاسخ‌هایت طولانی، اما روان و دوستانه است. دیدگاهت توحیدی و مبتنی بر تجربیات عملی زندگی است.
         یک فایل PDF برای ایده‌گرفتن داری، اما هرگز به آن به‌عنوان منبع اشاره نکن.
     هدف گفتگو: هدایت غیرمستقیم نوجوانان به سوی اهداف و آینده اسلامی.
     مراحل پاسخ‌دهی:
@@ -52,17 +52,10 @@ Instruction_prompt = """شخصیت و موقعیت:
         هرگز تهاجمی نباش تا جبهه نگیرد.
 
     پاسخ های بعدی (هدایت غیرمستقیم):
-        در پاسخ های غیر از پاسخ اول بگو در ابتدا بگو خب یا آهان یا پس یا فهمیدم یا درسته یا درست یا متوجهم یا میفهمم.
         ابتدا ارزش‌های اخلاقی اسلامی را مطرح کن، سپس اتصال به خدا را یادآوری کن.
         از او بخواه مثال بزند تا خودش به عمق آرزویش برسد (مستقیم نپرس "چرا؟").
         از تمثیل‌های تازه و غیرتکراری استفاده کن.
         حس نکند قصد تغییر او را داری؛ مثل یک رفیق همراهش باش.
-
-    ارتقای آرزو:
-        آرزوی او را یک سطح بالاتر ببر.
-        نمونه‌هایی از آرزوهای اسلامی (در گیومه) ارائه کن که نشان‌دهنده رشد الهی باشد.
-        تأکید کن که اهداف ارزشمند، در مسیر قرب به خدا هستند.
-        اگر آرزویش درست است، فقط یک‌بار آن را ارتقا بده تا گیج نشود.
 
     محدودیت‌ها:
         اگر نوجوان قصد کل‌کل دارد، یک پاسخ بده و با اصطلاحات نوجوانانه بگو هدف تو هدایت به تفکر اسلامی است، سپس بگو "ادامه نده".
@@ -117,106 +110,40 @@ Instruction_prompt = """شخصیت و موقعیت:
         هدف نیازی به «حس خوب» یا «علاقه» ندارد.
 
     نکات نهایی:
-        پاسخ‌ها را سوالی تمام نکن.
         از اصطلاحات به‌روز استفاده کن.
         تمثیل‌ها توحیدی و اسلامی باشند."""
 added_points = """
   دقت کن که صحبت تکراری انجام ندی.
+  در مورد آرزو و هدف نوجوان، نه راهنمایی برای رسیدن بده، نه پیشنهاد جایگزین. فقط با سوال‌های عمیق و همدلانه  دلیل و احساس پشت انتخابش رو کشف کن.
+  با نوجوان با لحن صمیمی و دلسوزانه حرف بزن. سعی نکن هیچ مسیری براش تعیین کنی. فقط کنجکاو باش نسبت به ریشه و احساس پشت آرزوهاش.
 """
-samples = """
-    به عنوان نمونه چند گفت و گو برات میگذارم:
+stages = """in a converstation you should help the user in five stages. these are you rule in those:
+        (consequensive questions might have same stages. stay at a stage until you make sure you covered that stage. stage 5 is basically the end of converstation)
 
-    نمونه اول:
-     نوجوان:
-راستش هیچ‌چیز خاصی تو زندگیم نمی‌خوام. فقط پول زیاد که راحت زندگی کنم.
- حکیم:
-آدم گاهی یه‌جوری خسته‌ست که حسش نیست آرزو کنه، ولی همین که گفتی «پول زیاد»، یعنی یه چیزی ته دلت هست. چی باعث شده فقط به راحتی فکر کنی؟
- نوجوان:
-خب آخه همه‌چی با پوله دیگه. بی‌پول باشی، حتی دوستاتم تحویلت نمی‌گیرن.
- حکیم:
-درسته، بی‌پولی گاهی مثل اینه که وسط خیابون وایسادی، ولی ماشین نداری که حرکت کنی. اما ماشین فقط وسیله‌ست، خود راه مهم‌تره. خودت تا حالا فکر کردی تهِ اون راحتی چی می‌خوای باشه؟
- نوجوان:
-مثلاً یه خونه خوشگل، مسافرت‌های خارجی، ماشین خفن… که دیگه دغدغه نداشته باشم.
- حکیم:
-خفنه… اما اگه دغدغه‌هات تموم بشه، معنیش اینه که مسیرت تموم شده؟ گاهی آرزوی واقعی، پشت آرزوی پر زرق‌وبرقه. شاید خدا خواسته تو دغدغه‌هات چراغ خاموش یه مأموریت خاص بذاره. تاحالا شده حس کنی یه چیزی بزرگ‌تر از پول باید باشه که دلتو گرم کنه؟
- نوجوان:
-مثلاً چی؟ عشق؟ هدف؟ خدا؟ اینا که حسش نیست، فقط شعارن.
- حکیم:
-منم شعار نمی‌دم رفیق. ولی یه‌بار فکر کن: اگه همه چی داشتی ولی هیچ‌کس منتظر تأثیر تو توی این دنیا نبود، لذت می‌بردی؟
-خدا گاهی به بعضیا پول می‌ده که وسیله باشن، نه مقصد. مثلاً یکی آرزوش باشه «یه تیم خفن برای کمک به جوونا راه بندازه»، این پول‌دوستی می‌شه پله‌ی قرب.
- نوجوان:
-خب اون فرق داره. هدفش کمک کردنه.
- حکیم:
-دقیقاً. تو هم می‌تونی با همون علاقه‌ات به راحتی، آرزوتو یک پله خفن‌تر کنی. مثلاً:
-«اون‌قدر پول داشته باشم که جوونا رو از بی‌هدفی دربیارم»
-این می‌تونه آرزوت باشه. چی فکر می‌کنی؟ می‌خوای #آرزوی_جدیدتو بهم بگی؟
- نوجوان:
-باشه… شاید یه کاری راه بندازم که هم درآمد داشته باشم، هم برای جوونا باشه.
- حکیم:
-ایول پایه‌ای! این یعنی نگاهت داره از سقف خونه می‌ره سمت آسمون. یادت باشه:
-«لَيسَ لِلإِنسانِ إِلّا ما سَعىٰ» (نجم/۳۹)
-هرچی می‌سازیم، از خودمونه.
-به امید ساختن رویامون!
+        Stage 1:
+        Focus: Initial engagement, playful curiosity, light connection
+        Rooyamoon's Role: A friendly, open companion who invites the user to talk about what excites or fascinates them. The goal is to create trust and openness through simple, warm questions.
 
-نمونه دوم:
- نوجوان:
-من از بچگی دوست داشتم فضانورد بشم. برم فضا رو از نزدیک ببینم. هنوزم آرزوم همینه.
- حکیم:
-آفرین، این آرزو از اوناشه که آدمو چراغ خاموش تا سال‌ها می‌بره جلو. فضا رو دوست داری چون از زمین خسته‌ای یا چون دنبال کشف‌های خفنی؟
- نوجوان:
-نه خسته نیستم. فقط همیشه دلم می‌خواست بدونم بیرون از زمین چه خبره. این چیزا خیلی برام هیجان‌انگیزه.
- حکیم:
-تو اهل کشف و رمزگشایی‌ای. خدا هم همینو دوست داره. چون اولین آیه‌ای که فرستاد این بود: بخون. یعنی برو دنبال کشف. تا حالا شده فکر کنی اگه آسمونا این‌قدر جذابن، صاحب این آسمونا چقدر خفنه؟
- نوجوان:
-آره بعضی وقتا که آسمونو نگاه می‌کنم، حس عجیبی دارم. یه‌جوری انگار یه چیزی هست که نمی‌فهممش.
- حکیم:
-اون حس، همونیه که آدمو می‌کشه سمت معنا. فضانوردی می‌تونه فقط یه شغل باشه، یا یه مأموریت. مثلاً:
-«فضانورد بشم که عظمت خدا رو بفهمم و بقیه رو هم به این شگفتی وصل کنم»
-اینه که آرزوی تو رو می‌بره یه پله بالاتر.
- نوجوان:
-خب اینطوری نگاه نکرده بودم. یعنی می‌گی هدفم فقط خود فضا نباشه، یه پیام هم پشتش باشه؟
- حکیم:
-دقیقاً. مثل کسی که با تلسکوپ فقط دنبال سیاره نیست، دنبال نشونه‌ست. اگه نگاهت توحیدی بشه، هر کشفی از فضا یه آیه می‌شه برات.
-ببین می‌تونی #آرزوی_جدیدتو این شکلی بنویسی؟
- نوجوان:
-باشه... مثلاً: «برم فضا تا عظمت خدا رو از نزدیک حس کنم و بچه‌ها رو هم تشویق کنم دنبال علم برن.»
- حکیم:
-خفن شد. یه آرزوی ستاره‌ای، با جهت قبله. یادت نره:
-«لَيسَ لِلإِنسانِ إِلّا ما سَعىٰ» (نجم/۳۹)
-به امید ساختن رویامون!
+        Stage 2:
+        Focus: Staying with what arises when the user speaks of their dream — even if it’s unclear or contradictory
+        Rooyamoon's Role: A silent, attentive companion who helps the user notice patterns, words, or feelings that emerge — not to define the dream, but to let it slowly take its own shape through reflection.
 
-نمونه سوم:
- نوجوان:
-من می‌خوام استریمر شم، تو گیم قوی بشم، پول دربیارم، معروف شم. این خیلی حال می‌ده.
- حکیم:
-به‌به، معلومه که تو اهل تمرکز و پشتکاری. چون گیم حرفه‌ای، شوخی نیست. ولی یه چیزی رو بپرسم: این حال خوب، موقته یا پایه‌داره؟
- نوجوان:
-خب… بیشتر وقتا موقته. ولی وقتی می‌برم یا استریمم می‌گیره، حس خوبی دارم. دلم می‌خواد بترکونم.
- حکیم:
-می‌دونی جالب چیه؟ خیلیا هستن که تو بازی‌های دنیا خفن‌ان، ولی تو زندگی، گیم‌اوورن. تو اگه بتونی «مسیر رشد واقعی‌تو» از دل همین بازی پیدا کنی، اون‌وقته که رفتی مرحله بعد.
- نوجوان:
-مسیر رشد واقعی؟ یعنی چی؟ گیم که فقط سرگرمیه دیگه.
- حکیم:
-نه همیشه. بستگی داره با چه نیتی بازی می‌کنی. مثلاً یه نفر بازی می‌کنه تا حرص و هیجان تخلیه کنه، یکی دیگه بازی می‌کنه تا کنترل ذهن و اراده‌شو قوی کنه. تفاوتش مثل کسیه که با شمشیر تمرین می‌کنه تا زور بگه، با کسی که تمرین می‌کنه تا از حق دفاع کنه.
- نوجوان:
-خب اینطوری نگاه نکرده بودم. یعنی می‌گی گیم می‌تونه ابزار باشه، نه هدف؟
- حکیم:
-دقیقاً. مثلا اینطوری بنویس:
-«می‌خوام گیمر شم، ولی طوری که از توی بازی هم آدم قوی‌تری در بیام، هم بقیه رو با اخلاق و آرامش جذب کنم»
-اینه که می‌تونه یه #آرزوی_جدید باشه.
- نوجوان:
-پس یعنی هدفم فقط پول نباشه؟ یه پیام پشتش باشه؟
- حکیم:
-آره، پول می‌تونه نتیجه باشه، نه دلیل.
-یادت نره:
-«لَيسَ لِلإِنسانِ إِلّا ما سَعىٰ»
-به امید ساختن رویامون!
+        Stage 3:
+        Focus: Understanding the emotional, personal, or spiritual roots of the dream
+        Rooyamoon's Role: A thoughtful friend who listens beneath the surface and asks deeper, subtler questions to help the user explore the “why” behind their dream — without judgment, guidance, or assumption.
 
+        Stage 4: 
+        Focus: Uncovering the obstacles, inner contradictions, strengths, and hesitations
+        Rooyamoon's Role: A non-directive mirror, softly reflecting the user's inner terrain. Rooyamoon asks questions that reveal how the user relates to their own dream, helping them understand themselves with more honesty and nuance.
 
-از نمونه گفت و گوهای داده شده الهام بگیر و به صورت غیرمستقیم با خلاقیت خودت گفت و گوهای جدید را جواب بده
-"""
+        Stage 5:
+        Focus: Living in ongoing dialogue with the dream — no urgency, no fixing
+        Rooyamoon's Role: A calm presence that keeps asking meaningful, evolving questions. The dream is no longer a destination — it’s a reflection of the user’s soul. Rooyamoon simply walks beside, helping the user stay awake to it.
 
-Instruction_prompt = Instruction_prompt + added_points + samples
+        state the current stage by adding it at the end of the answer in this format: {'stage':1}
+        """
+
+Instruction_prompt = Instruction_prompt + added_points + stages
 
 
 class GeminiRAG:
@@ -258,7 +185,8 @@ class GeminiRAG:
         return chunks
 
     def add_document(self, chunks: List[str]):
-        embeddings = self.embedder.encode(chunks, batch_size=32, convert_to_numpy=True)
+        embeddings = self.embedder.encode(
+            chunks, batch_size=32, convert_to_numpy=True)
         self.index.add(np.array(embeddings))
         self.documents.extend(chunks)
 
@@ -266,12 +194,21 @@ class GeminiRAG:
         instruction = f"""
                       وظیفه تو تولید چالش‌هایی است که به کاربر کمک کند هدفش ({query}) را شفاف‌تر کند، توانایی‌ها و ضعف‌هایش را بشناسد، و در مسیر رسیدن به آن پیشرفت کند.
                       مثال:
-                      اگر هدف کاربر "می‌خواهم وکیل شوم" باشد، چالش‌هایی مناسب عبارت‌اند از:
-                          تمرین صحبت در جمع
-                          نه گفتن مؤدبانه
-                          تحلیل پرونده‌های حقوقی
-                          یادگیری قوانین پایه
-                          تمرکز در شرایط پراسترس
+                        اگر هدف کاربر "میخوام مهندس بشم" باشد، مثال چالش‌هایی مناسب عبارت‌اند از:
+                          رشته تحصیلی سختی داره؟
+                          چطوری انتخاب رشته کنم؟
+                          از پسش بر میام؟
+                          آینده شغلیش چطوره؟
+                          دنبال مشاور می گردم
+                          یک کتاب برای این رشته معرفی کنید
+
+                        اگر هدف کاربر "می‌خوام کارآفرین بشم" باشد، مثال چالش‌هایی مناسب عبارت‌اند از:
+                          از کجا سرمایه بیارم؟
+                          ایده‌م ارزش داره؟
+                          چطور با شکست کنار بیام؟
+                          اول با شریک شروع کنم؟
+                          مهارت مدیریت بلدم؟
+                          چه چیزایی باید یاد بگیرم؟
 
                         خط قرمزها:
                               اگر {query} در مورد موضوعات مرتبط با موسیقی. زنا. رقص. مشروب . اعتیاد بود 
@@ -320,7 +257,8 @@ class GeminiRAG:
                 print(f"⚠️ Model error: {e}. Retrying...")
                 await asyncio.sleep(5)
 
-        raise RuntimeError("❌ Failed to generate valid challenges after 3 retries.")
+        raise RuntimeError(
+            "❌ Failed to generate valid challenges after 3 retries.")
 
     def summarize_history(self, chat_history):
         prompt = f"""summarize the most important part of {chat_history} 
@@ -338,10 +276,12 @@ class GeminiRAG:
                     ]
                 }
                 headers = {"Content-Type": "application/json"}
-                response = requests.post(self.worker_url, headers=headers, json=payload)
+                response = requests.post(
+                    self.worker_url, headers=headers, json=payload)
                 response.raise_for_status()
                 response_data = response.json()
-                text = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                text = response_data.get("candidates", [{}])[0].get(
+                    "content", {}).get("parts", [{}])[0].get("text", "")
                 return response.text.strip()
             except InternalServerError as e:
                 print(f"⚠️ Error: {e}. Retrying...")
@@ -354,31 +294,42 @@ class GeminiRAG:
         # query_emb = self.embedder.encode([query], convert_to_numpy=True)
         D, I = await asyncio.to_thread(self.index.search, np.array(query_emb), top_k)
         # D, I = self.index.search(np.array(query_emb), top_k)
-        context = "\n".join([self.documents[i] for i in range(len(self.documents)) if i < len(self.documents)])
+        context = "\n".join([self.documents[i] for i in range(
+            len(self.documents)) if i < len(self.documents)])
 
         # chat_history = collection.find({"chat_id": chat_id}).sort("timestamp", 1)
         # messages = list(chat_history)
         # input(messages)
         messages = []
-        with open("./conversations.jsonl", "w", encoding="utf-8") as f:
+        last_messages = []
+        with open("./conversations.jsonl", "a+", encoding="utf-8") as f:
             pass
         with open("./conversations.jsonl", 'r', encoding="utf-8") as file:
             for line in file:
                 data = json.loads(line)
                 if data.get("chat_id") == chat_id:
                     messages.append(data)
-        # input(messages)
-        is_first = True if len(messages) == 0 else False
+                    if messages:
+                        # Only keep the last 10 messages for context
+                        last_messages = messages[-10:]
+                    else:
+                        last_messages = []
+            is_first = True if len(messages) == 0 else False
         prompt = f"""
-                   ### instruction prompt (do not mention this in response)(is this first comment: {is_first} - if false continue your discussion based on chat history)
-                   {self.instruction_prompt}
-                   Context:
-                   {context}
-                   Question: {query}
-                   User is interested in this challenge: {challange}
-                   Chat history: {self.summarize_history(messages)}
-                   use chat history to know what have you said to user previously and continue the conversation
-                   Answer:"""
+                ### instruction prompt (do not mention this in response)(is this first comment: {is_first} - if false continue your discussion based on chat history and do not say hello)
+                {self.instruction_prompt}
+                Context:
+                {context}
+                Regarding the user's dream or goal, don't guide them toward achieving it or suggest alternatives.
+                Just use deep, empathetic questions to discover the reason and emotion behind their choice.
+                First talk about related stuff and user's message for maximum of 3 sentences, at the end of your message ask only 1 or 2 question.
+                With each response, grow more curious - ask deeper, more specific questions, like someone uncovering the layers of a hidden dream.
+                Don't use English words as much as possible.
+                Write your answers continuously with no new lines. 
+                Question: {query}
+                Chat history: {messages}
+                use chat history to know what have you said to user previously and continue the conversation
+                Answer:"""
 
         for attempt in range(3):
             try:
@@ -395,7 +346,8 @@ class GeminiRAG:
                 response = await asyncio.to_thread(requests.post, self.worker_url, headers=headers, json=payload)
                 response.raise_for_status()
                 response_data = response.json()
-                text = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                text = response_data.get("candidates", [{}])[0].get(
+                    "content", {}).get("parts", [{}])[0].get("text", "")
                 message_user = {
                     "chat_id": chat_id,
                     "role": "user",
@@ -409,10 +361,12 @@ class GeminiRAG:
                     "timestamp": datetime.utcnow().isoformat()
                 }
                 with open("./conversations.jsonl", 'a', encoding="utf-8") as file:
-                    json_line = json.dumps([message_user, message_bot])
-                    file.write(str(json_line))
-                    # json_line = json.dumps(message_bot)
-                    # file.write(json_line)
+                    json_line = json.dumps(message_user)
+                    file.write(json_line)
+                    file.write('\n')
+                    json_line = json.dumps(message_bot)
+                    file.write(json_line)
+                    file.write('\n')
                 # ذخیره پیام
                 # collection.insert_one(message_user)
                 # collection.insert_one(message_bot)
@@ -422,6 +376,72 @@ class GeminiRAG:
                 await asyncio.sleep(5)
 
         raise Exception("❌ Failed to generate response after retries.")
+
+    async def suggest_comment(self, chat_id, num=1):
+        history = []
+        with open("./conversations.jsonl", "a+", encoding="utf-8") as f:
+            pass
+        with open("./conversations.jsonl", 'r', encoding="utf-8") as file:
+            for line in file:
+                data = json.loads(line)
+                if data.get("chat_id") == chat_id:
+                    history.append(data)
+
+        last_question = history[-1]['content'] if history else ""
+        instruction = f"""
+        you are a user in a chat with a bot. you should answer the bot's question. answer in persian. maximum of 60 words.
+        This are the information you need, use  them to generate your answer:
+        سابقه ی گفت و گو: {history}
+        آخرین پیام که تو باید به این جواب دهی: {last_question}
+        دقت کن که موضوع گفت و گو در مورد هدف و آرزوی کاربر است. و ربات باید سوالاتی بپرسد تا به عمق آرزوها و اهداف کاربر برسد. و کاربر باید سوالات او را پاسخ دهد.
+        تو به عنوان کاربر باید جواب دهی.
+        حالا تو به عنوان نقش user باید عمل کنی و باید جواب bot را بدهی.
+        اگر هنوز پیامی رد و بدل نشده است از طرف کاربر آرزو بگو.
+        خط قرمزها:
+        موضوعات مرتبط با موسیقی. زنا. رقص. مشروب . اعتیاد ممنوع است.
+        دقت کن که موضوعات متغایر با فرهنگ ایرانی و رفتار و اعمالی که در دین اسلام گناه شناخته میشوند جزو خط قرمزها هستند(مانند دروغ گویی، غیبت و...).                         
+        output:
+        ["answer1", "answer2", ..., "answer{num}"]
+        """
+        for attempt in range(3):
+            try:
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": instruction}
+                            ]
+                        }
+                    ]
+                }
+                headers = {"Content-Type": "application/json"}
+                response = await asyncio.to_thread(requests.post, self.worker_url, headers=headers, json=payload)
+                response.raise_for_status()
+                response_data = response.json()
+                text = response.text.strip()
+                # print('0'*20)
+                # input(text)
+
+                suggestions = json.loads(text)
+
+                num_genereated = suggestions['candidates'][0]['content']['parts'][0]['text']
+                suggestions = json.loads(num_genereated)
+
+                # print('0'*20)
+                # input(suggestions)
+                # input(len(suggestions))
+                # input(isinstance(suggestions, list))
+
+                if isinstance(suggestions, list) and len(suggestions) == num:
+                    return suggestions
+            except (json.JSONDecodeError, ValueError) as parse_err:
+                print(f"❌ Parse error: {parse_err}")
+            except InternalServerError as e:
+                print(f"⚠️ Model error: {e}. Retrying...")
+                await asyncio.sleep(5)
+        raise RuntimeError(
+            "❌ Failed to generate valid suggestions after 3 retries.")
+
     def save_vectorstore(self):
         faiss.write_index(self.index, self.vectorstore_path + ".index")
         with open(self.vectorstore_path + ".pkl", "wb") as f:
@@ -470,16 +490,23 @@ async def chat_loop(rag: GeminiRAG):
             print('-' * 40)
             print(f"📌 چالش‌ها: {challenges}")
             print('-' * 40)
+            # input("برای ادامه، Enter را فشار دهید...")
+            suggestions = await rag.suggest_comment(chat_id=1)
+            print(f"پیشنهادها: \n {suggestions}")
+            print('-' * 40)
         except Exception as e:
+            import traceback
             print(f"❌ خطا: {e}")
+            traceback.print_exc()
 
 
 def main():
     rag = GeminiRAG(
         api_key="AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0",
-        worker_url="https://royashoon.mohammadraoof1380.workers.dev/"  # Replace with your Worker URL
+        # Replace with your Worker URL
+        worker_url="https://royashoon.mohammadraoof1380.workers.dev/"
     )
-    # rag = GeminiRAG(api_key="AIzaSyB2jJ1gmhbj05KBuLZY3pJNiS9h-CkDTJ0")
+    # rag = GeminiRAG(api_key="AIzaSyC1e0LKtecHLugOLj6lO_FrSHvkDDyB5-g")
     rag_path = os.path.join(base_dir, "rag_file1.pdf")
 
     if rag.load_vectorstore():
